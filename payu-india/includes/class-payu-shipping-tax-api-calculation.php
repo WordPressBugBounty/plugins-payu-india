@@ -58,7 +58,7 @@ class PayuShippingTaxApiCalc
             return new WP_REST_Response($response, 500);
         }
         $response_code = $response['status'] == 'false' ? 400 : 200;
-        error_log('shipping api call response ' . wp_json_encode($response));
+        error_log('shipping api call response ' . json_encode($response));
         return new WP_REST_Response($response, $response_code); 
     }
 
@@ -133,7 +133,7 @@ class PayuShippingTaxApiCalc
         $order->set_shipping_address($new_address);
         $order->set_address($new_address, 'shipping');
         $order->set_address($new_address, 'billing');
-        error_log('set order address ' . wp_json_encode($new_address));
+        error_log('set order address ' . json_encode($new_address));
         $order->set_billing_email($email);
         $order->save();
     }
@@ -205,14 +205,31 @@ class PayuShippingTaxApiCalc
                         $shipping_data[$shipping_method_count]['carrier_title']  = $shipping_rate->get_label();
                         $shipping_data[$shipping_method_count]['amount']        = $shipping_rate->get_cost();
                         $shipping_data[$shipping_method_count]['error_message']        = "";
-                        $shipping_data[$shipping_method_count]['tax_price']    = $tax_amount;
+                        $plugin_data = get_option('woocommerce_payubiz_settings');
+                        $payu_dynamic_charges_flag = $plugin_data['dynamic_charges_flag'];
+        
+                        if($payu_dynamic_charges_flag=="yes" && wc_prices_include_tax()){
+                            if(WC()->cart->get_shipping_tax()){
+                            $shipping_data[$shipping_method_count]['tax_price']    = round(WC()->cart->get_shipping_tax(), 2);
+                            $shipping_data[$shipping_method_count]['tax_price_inclusive'] = round($tax_amount, 2);
+                            }
+                            else{
+                            $shipping_data[$shipping_method_count]['tax_price']    = 0;
+                            $shipping_data[$shipping_method_count]['tax_price_inclusive'] = round($tax_amount, 2);    
+                            }
+                            
+                        }
+                        else{
+                            $shipping_data[$shipping_method_count]['tax_price']    = round($tax_amount, 2);
+                        }
+                        
                         $shipping_data[$shipping_method_count]['subtotal']   = WC()->cart->get_subtotal();
-                        $shipping_data[$shipping_method_count]['grand_total']   = WC()->cart->get_subtotal() + $shipping_rate->get_cost() + $tax_amount;
+                        $shipping_data[$shipping_method_count]['grand_total']   = round(WC()->cart->get_subtotal() + $shipping_rate->get_cost()+ $tax_amount, 2);
                         $shipping_method_count++;
                     }
                 } else if(WC()->cart->get_tax_totals()){
                     foreach (WC()->cart->get_tax_totals() as $tax) {
-                        $tax_amount   = $tax->amount + $tax_amount;
+                        $tax_amount   = $tax->amount + $tax_amount; 
                     }
                     $shipping_data[0]['carrier_code']   = '';
                     $shipping_data[0]['method_code']   = '';

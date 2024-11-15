@@ -435,6 +435,9 @@ class PayuPaymentValidation
 			'postcode' => $order->get_shipping_postcode(), // (optional value)
 			'city'     => $order->get_shipping_city(), // (optional value)
 		);
+        foreach($order->get_items('shipping') as $item_id => $item) {       
+               $order->remove_item($item_id);
+        }
 		$added_shipping = array();
 		foreach ($order->get_items('shipping') as $item) {
 			$method_id = $item->get_method_id();

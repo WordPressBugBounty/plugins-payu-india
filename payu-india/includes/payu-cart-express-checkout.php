@@ -217,7 +217,7 @@ class PayuCartExpressCheckout
 
         if (is_checkout()) {
             // Get the current URL
-            $current_url = home_url(add_query_arg(array(), wp_unslash(esc_url(empty($_SERVER['REQUEST_URI'])))));
+            $current_url = home_url(add_query_arg(array(), $_SERVER['REQUEST_URI']));
             $cart_url = wc_get_cart_url();
             // Check if "/order-pay" is not present in the URL
             if (strpos($current_url, '/order-pay') === false && strpos($current_url, '/order-received') === false) {

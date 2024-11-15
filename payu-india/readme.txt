@@ -1,15 +1,15 @@
 === PayU CommercePro Plugin ===
-Contributors: ()
+Contributors:
 Donate Link:
-Tags: payment, gateway, payu, plugin
+Tags: payment, gateway, payu
 Requires at least: 5.3
-Tested up to: 6.6.2
+Tested up to: 6.7
 Stable tag: 3.8.3
-Requires PHP: 7.3
+Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-CommercePro payment plugin by PayU Payment Gateway (India)for WooCommerce (tested from 3.8 to 6.6.2).
+CommercePro payment plugin by PayU Payment Gateway (India)for WooCommerce (tested from 5.3 to 6.7).
 
 == Description ==
 

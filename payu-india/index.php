@@ -6,14 +6,15 @@ Description: Extends WooCommerce with PayU.
 Version: 3.8.3
 Author: PayU
 Author URI: https://payu.in/
-Tags: payment, gateway, payu, plugin
+Tags: payment, gateway, payu
 Requires at least: 5.3
-Tested up to: 6.6.2
+Tested up to: 6.7
 Stable tag: 3.8.3
-Requires PHP: 7.3
+Requires PHP: 7.4
 License: GPLv2 or later
+Woo: 7310302:82f4a3fafb07f086f3ebac34a6a03729
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
-Copyright: © 2020, PayU. All rights reserved.
+Copyright: © 2024, PayU. All rights reserved.
 */
 if (!defined('ABSPATH')) {
 	exit; // Exit if accessed directly
