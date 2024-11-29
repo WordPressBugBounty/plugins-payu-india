@@ -126,8 +126,8 @@ class WcPayubiz extends WC_Payment_Gateway
 	 **/
 	public function admin_options()
 	{
-		echo '<h3>' . esc_html__('PayUBiz payment', 'payubiz') . '</h3>';
-		echo '<p>' . esc_html__('PayUBiz most popular payment gateways for online shopping.', 'payubiz') . '</p>';
+		echo '<h3>' . esc_html__('PayU India', 'payubiz') . '</h3>';
+		echo '<p>' . sprintf( __( '<a target="_blank" href="https://onboarding.payu.in/app/account/signup?partner_name=WooCommerce&partner_source=Affiliate+Links&partner_uuid=11eb-3a29-70592552-8c2b-0a696b110fde&source=Partner">Sign up</a> for a PayU merchant account to get started or <a target="_blank" href="https://onboarding.payu.in/app/account/login?partner_name=WooCommerce&partner_source=Affiliate+Links&partner_uuid=11eb-3a29-70592552-8c2b-0a696b110fde&source=Partner">login</a> to your existing account.', 'payubiz' ) ) . '</p>';
 		if (PHP_VERSION_ID < 70300) {
 			echo "<h1 style=\"color:red;\">" . esc_html__('**Notice: PayU payment plugin requires PHP v7.3 or higher.<br />
 			Plugin will not work properly below PHP v7.3 due to SameSite cookie restriction.', 'payubiz') . "</h1>";
