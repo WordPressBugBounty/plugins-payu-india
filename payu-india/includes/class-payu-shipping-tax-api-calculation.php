@@ -32,8 +32,8 @@ class PayuShippingTaxApiCalc
         $parameters = json_decode($request->get_body(), true);
         error_log('shipping api call request ' . $request->get_body());
 
-        $email = $parameters['email'];
-        $txnid = $parameters['txnid'];
+        $email = sanitize_email($parameters['email']);
+        $txnid = sanitize_text_field($parameters['txnid']);
 
         $auth = apache_request_headers();
         $token = $auth['Auth-Token'];
@@ -171,7 +171,7 @@ class PayuShippingTaxApiCalc
                 array(
                     'session_key' => $user_id,
                 ),
-            );
+            ); 
 
             WC()->customer = new WC_Customer($user_id, true);
             // create new Cart Object
@@ -183,9 +183,28 @@ class PayuShippingTaxApiCalc
             WC()->customer->set_shipping_postcode($order->get_shipping_postcode());
             WC()->customer->set_shipping_address_1($order->get_shipping_address_1());
             WC()->cart = new WC_Cart();
-            wp_set_current_user($user_id);
-            wp_set_auth_cookie($user_id);
-            WC()->cart->calculate_totals();
+			if (!empty($_POST['username']) && !empty($_POST['password'])) {
+				$username = sanitize_text_field($_POST['username']);
+				$password = $_POST['password']; // Password should not be sanitized
+				
+				// Authenticate the user
+				$user = wp_authenticate($username, $password);
+				
+				if (is_wp_error($user)) {
+					// Handle authentication failure
+					echo 'Invalid credentials';
+				} else {
+					$user_id = $user->ID;
+
+					// Set the current user and authentication cookie
+					wp_set_current_user($user_id);
+					wp_set_auth_cookie($user_id);
+					
+					echo 'User authenticated and logged in';
+				}
+			}
+
+			WC()->cart->calculate_totals();
             // Loop through shipping packages from WC_Session (They can be multiple in some cases)
             $shipping_method_count = 0;
             foreach (WC()->cart->get_shipping_packages() as $package_id => $package) {
@@ -274,38 +293,64 @@ class PayuShippingTaxApiCalc
     }
 
 
-    public function payu_generate_get_user_token()
+    public function payu_generate_get_user_token() 
     {
         register_rest_route('payu/v1', '/generate-user-token', array(
             'methods' => ['POST'],
             'callback' => array($this, 'payu_generate_user_token_callback'),
-            'permission_callback' => '__return_true'
+            'permission_callback' => function () {
+                return is_user_logged_in(); // Restrict to logged-in users
+            }
         ));
     }
-
-    public function payu_generate_user_token_callback()
+    
+    public function payu_generate_user_token_callback(WP_REST_Request $request)
     {
-        $email = PAYU_USER_TOKEN_EMAIL;
+        // Get and sanitize the email from request
+        $email = sanitize_email($request->get_param('email'));
+    
+        if (!$email || !is_email($email)) {
+            return new WP_REST_Response([
+                'status' => false,
+                'data' => [],
+                'message' => 'Invalid email address provided.',
+            ], 400); // 400 Bad Request
+        }
+    
+        // Fetch plugin settings
         $plugin_data = get_option('woocommerce_payubiz_settings');
-        $this->payu_salt = $plugin_data['currency1_payu_salt'];
+        $this->payu_salt = isset($plugin_data['currency1_payu_salt']) ? sanitize_text_field($plugin_data['currency1_payu_salt']) : null;
+    
+        if (!$this->payu_salt) {
+            return new WP_REST_Response([
+                'status' => false,
+                'data' => [],
+                'message' => 'Plugin configuration is missing.',
+            ], 500); // 500 Internal Server Error
+        }
+    
+        // Check if the user exists
         if (email_exists($email)) {
             $user = get_user_by('email', $email);
             $user_id = $user->ID;
+    
+            // Generate authentication token
             $token = $this->payu_generate_authentication_token($user_id);
-            $response = [
+    
+            return new WP_REST_Response([
                 'status' => true,
-                'data' => array('token' => $token),
-                'message' => 'Token Generated'
-            ];
+                'data' => ['token' => $token],
+                'message' => 'Token Generated',
+            ]);
         } else {
-            $response = [
+            return new WP_REST_Response([
                 'status' => false,
                 'data' => [],
-                'message' => "Account not exist from this email $email"
-            ];
+                'message' => "Account does not exist for this email: $email",
+            ], 404); // 404 Not Found
         }
-        return new WP_REST_Response($response);
     }
+    
 
     private function payu_generate_authentication_token($user_id)
     {

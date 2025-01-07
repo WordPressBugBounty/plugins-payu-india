@@ -3,13 +3,13 @@
 Plugin Name: PayU India
 Plugin URI: https://payu.in/
 Description: Extends WooCommerce with PayU.
-Version: 3.8.3
+Version: 3.8.4
 Author: PayU
 Author URI: https://payu.in/
 Tags: payment, gateway, payu
 Requires at least: 5.3
-Tested up to: 6.7
-Stable tag: 3.8.3
+Tested up to: 6.7.1
+Stable tag: 3.8.4
 Requires PHP: 7.4
 License: GPLv2 or later
 Woo: 7310302:82f4a3fafb07f086f3ebac34a6a03729
