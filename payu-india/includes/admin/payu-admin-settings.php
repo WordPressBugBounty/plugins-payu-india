@@ -28,6 +28,7 @@ if(!function_exists('payuAdminFields')){
                   'dynamic_charges_flag' => array(
                         'title' => __('Fetch Shipping Charges from Store', 'payubiz'),
                         'type' => 'checkbox',
+                        'description' => __('Make sure to add shipping charges.','payubiz'),
                         'label' => __('Fetch Shipping Charges from Store', 'payubiz'),
                         'default' => 'false'
                   ),
@@ -94,7 +95,105 @@ if(!function_exists('payuAdminFields')){
                         'type' => 'select',
                         'options' => payu_get_pages('Select Page'),
                         'description' => "Post payment redirect URL for which payment is not successful."
-                  )
+                  ),
+                  //Added Settings by SM For Buy Now
+                  'enable_buy_now' => array(
+                        'title' => __('Enable/Disable Buy Now [ This will work only for CommercePro Checkout. ]', 'payubiz'),
+                        'type' => 'checkbox',
+                        'label' => __('Enable Buy Now', 'payubiz'),
+                        'default' => 'no',
+                        'class' => 'payu-checkoutexpress-buy-now-settings'
+                  ),
+                  // 'enable_buy_now_on_product_page' => array(
+                  //       'title' => __('Enable/Disable Buy Now On Product Page', 'payubiz'),
+                  //       'type' => 'checkbox',
+                  //       'label' => __('Enable Buy Now On Product Page', 'payubiz'),
+                  //       'default' => 'no',
+                  //       'class' => 'payu-buy-now-settings'
+                  // ),
+                  // 'enable_buy_now_on_shop_page' => array(
+                  //       'title' => __('Enable/Disable Buy Now On Shop Page', 'payubiz'),
+                  //       'type' => 'checkbox',
+                  //       'label' => __('Enable Buy Now On Shop Page', 'payubiz'),
+                  //       'default' => 'no'
+                  // ),
+                  'button_background_color' => array(
+                        'title' => __('Button Background Color', 'payubiz'),
+                        'type' => 'text',
+                        'description' => __('Set the background color for Buy Now with PayU buttons.', 'payubiz'),
+                        'default' => '#007BFF',
+                        'class' => 'payu-buy-now-settings'
+                  ),
+                  'button_text_color' => array(
+                        'title' => __('Button Text Color', 'payubiz'),
+                        'type' => 'text',
+                        'description' => __('Set the text color for Buy Now with PayU PayU buttons.', 'payubiz'),
+                        'default' => '#FFFFFF',
+                        'class' => 'payu-buy-now-settings'
+                  ),
+                  'button_border_radius' => array(
+                        'title' => __('Button Border Radius', 'payubiz'),
+                        'type' => 'number',
+                        'description' => __('Set the border radius for Buy Now with PayU button (e.g., 5 for rounded corners).', 'payubiz'),
+                        'default' => '6',
+                        'class' => 'payu-buy-now-settings'
+                  ),
+                  'button_hover_color' => array(
+                        'title' => __('Button Hover Color', 'payubiz'),
+                        'type' => 'text',
+                        'description' => __('Set the background color for Buy Now with PayU button on hover.', 'payubiz'),
+                        'default' => '#0056b3',
+                        'class' => 'payu-buy-now-settings'
+                  ),
+                  //Added Settings by SM For Affordability Widget
+                  'enable_affordability_widget' => array(
+                        'title' => __('Enable/Disable Affordability', 'payubiz'),
+                        'type' => 'checkbox',
+                        'label' => __('Enable Affordability Widget', 'payubiz'),
+                        'default' => 'no'
+                  ),
+                  'enable_affordability_widget_on_product_page' => array(
+                        'title' => __('Enable/Disable Affordability Widget On Product Page', 'payubiz'),
+                        'type' => 'checkbox',
+                        'label' => __('Enable Affordability Widget On Product Page', 'payubiz'),
+                        'default' => 'no',
+                        'class' => 'payu-affordability-settings'
+                  ),
+                  'enable_affordability_widget_on_cart_page' => array(
+                        'title' => __('Enable/Disable Affordability Widget On Cart Page', 'payubiz'),
+                        'type' => 'checkbox',
+                        'label' => __('Enable Affordability Widget On Cart Page', 'payubiz'),
+                        'default' => 'no',
+                        'class' => 'payu-affordability-settings'
+                  ),
+                  'enable_affordability_widget_on_checkout_page' => array(
+                        'title' => __('Enable/Disable Affordability Widget On Checkout Page [ This option is for Bolt & PayU Redirect Checkout. ]', 'payubiz'),
+                        'type' => 'checkbox',
+                        'label' => __('Enable Affordability Widget On Checkout Page', 'payubiz'),
+                        'default' => 'no',
+                        'class' => 'payu-affordability-settings'
+                  ),
+                  'lightColor' => array(
+                        'title' => __('LightColor', 'payubiz'),
+                        'type' => 'text',
+                        'description' =>  __('You can set the lightColor color of Affordability Widget.', 'payubiz'),
+                        'default' => '#FFFCF3',
+                        'class' => 'payu-affordability-settings'
+                  ),
+                  'darkColor' => array(
+                        'title' => __('DarkColor', 'payubiz'),
+                        'type' => 'text',
+                        'description' =>  __('You can set the darkColor color of Affordability Widget.', 'payubiz'),
+                        'default' => '#FFC915',
+                        'class' => 'payu-affordability-settings'
+                  ),
+                  'backgroundColor' => array(
+                        'title' => __('BackgroundColor', 'payubiz'),
+                        'type' => 'text',
+                        'description' =>  __('You can set the backgroundColor color of Affordability Widget.', 'payubiz'),
+                        'default' => '#FFFFFF',
+                        'class' => 'payu-affordability-settings'
+                  ),
             );
             return apply_filters(
                   'wc_payu_settings',

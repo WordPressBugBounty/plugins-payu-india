@@ -17,9 +17,17 @@ class PayuCartExpressCheckout
     public function __construct()
     {
         $plugin_data = get_option('woocommerce_payubiz_settings');
-        $this->checkout_express = $plugin_data['checkout_express'];
-        $this->payu_enable = $plugin_data['enabled'];
-        $this->disable_checkout = $plugin_data['disable_checkout'];
+
+        if (is_array($plugin_data)) {
+            $this->checkout_express = $plugin_data['checkout_express'];
+            $this->payu_enable = $plugin_data['enabled'];
+            $this->disable_checkout = $plugin_data['disable_checkout'];
+        } else {
+            $this->checkout_express = '';
+            $this->payu_enable = '';
+            $this->disable_checkout = '';
+        }
+
         add_filter('woocommerce_get_order_item_totals', array(&$this, 'add_custom_order_total_row'), 10, 2);
         add_filter('woocommerce_order_get_formatted_shipping_address', array($this, 'woocommerce_order_get_formatted_shipping_email_added'), 10, 3);
 
@@ -44,25 +52,33 @@ class PayuCartExpressCheckout
 
 
 
-    public function add_payu_buy_now_button()
-    {
+   /* ==========================================================================
+       ---------------- Cart page Buy Now Button ---------------------
+    ========================================================================== */
+    public function add_payu_buy_now_button() {
+        ?>
+        <a href="javascript:void(0);" class="checkout-button payu-checkout button alt wc-forward">Buy Now with PayU</a>
+        <?php
+        $this->handle_payu_checkout();
+    }
 
+     /* ==========================================================================
+       ---------------- Cart page Blocked Based or ShorcodeBased ---------------
+    ========================================================================== */
+    public function handle_payu_checkout() {
         wp_localize_script('custom-cart-script', 'wc_checkout_params', array(
             'ajax_url' => WC()->ajax_url(),
             'checkout_nonce' => wp_create_nonce('woocommerce-process_checkout')
-            // Add other parameters as needed
         ));
-
+    
         $addresses = $this->get_user_checkout_details();
         $billing_data = $addresses['billing'];
-
-?>
-        <a href="javascript:void(0);" class="checkout-button payu-checkout button alt wc-forward">Buy Now with PayU</a>
+    
+        ?>
         <script>
             var site_url = '<?php echo esc_url(get_site_url()); ?>';
             jQuery(document).ready(function($) {
-                // Trigger the custom checkout AJAX call
-                jQuery(document).unbind('click').on('click', '.payu-checkout', function() {
+                jQuery(document).on('click', '.payu-checkout', function() {
                     var data = {
                         billing_alt: 0,
                         billing_first_name: '<?php echo esc_html($billing_data['first_name']); ?>',
@@ -95,31 +111,27 @@ class PayuCartExpressCheckout
                         order_comments: '',
                         payment_method: 'payubiz',
                         _wp_http_referer: '/?wc-ajax=update_order_review',
-                        'woocommerce-process-checkout-nonce': wc_checkout_params.checkout_nonce, // Include the checkout nonce
+                        'woocommerce-process-checkout-nonce': wc_checkout_params.checkout_nonce,
                     };
+    
                     console.log(data);
                     jQuery.ajax({
                         type: 'POST',
                         url: '?wc-ajax=checkout',
                         data: data,
                         success: function(response) {
-                            // Handle the AJAX response
                             console.log(response);
                             if (response.result == 'success') {
                                 window.location = response.redirect;
-                            } else {
-
                             }
-                            // You may redirect to the checkout page or perform other actions based on the response
-                        },
+                        }
                     });
                 });
             });
         </script>
         <?php
-
     }
-
+    
     private function get_user_checkout_details()
     {
 
@@ -148,11 +160,16 @@ class PayuCartExpressCheckout
         $shipping_state = $wc_customer->get_shipping_state();
         $shipping_postcode = $wc_customer->get_shipping_postcode();
 
-        $first_name = $billing_first_name ? $billing_first_name : $shipping_first_name;
-        $last_name = $billing_last_name;
-        $address_1 = $billing_address ? $billing_address : $shipping_address;
-        $company = $billing_company;
-        $email = $billing_email ? $billing_email : $current_user_data->user_email;
+        // $first_name = $billing_first_name ? $billing_first_name : $shipping_first_name;
+        // $last_name = $billing_last_name;
+        // $address_1 = $billing_address ? $billing_address : $shipping_address;
+        // $company = $billing_company;
+        // $email = $billing_email ? $billing_email : $current_user_data->user_email;
+        $first_name = isset($billing_first_name) ? $billing_first_name : (isset($shipping_first_name) ? $shipping_first_name : '');
+        $last_name = isset($billing_last_name) ? $billing_last_name : '';
+        $address_1 = isset($billing_address) ? $billing_address : (isset($shipping_address) ? $shipping_address : '');
+        $company = isset($billing_company) ? $billing_company : '';
+        $email = isset($billing_email) ? $billing_email : (isset($current_user_data->user_email) ? $current_user_data->user_email : '');
         $city = $billing_city;
         $country = $billing_country;
         $state = $billing_state;
@@ -161,13 +178,13 @@ class PayuCartExpressCheckout
             'first_name' => $first_name ? $first_name : 'test',
             'last_name' => $last_name,
             'address_1' => $address_1 ? $address_1 : 'address',
-            'company' => $company,
-            'email' => $email ? $email : '',
+            'company' => $company ? $company : 'null',
+            'email' => $email ? $email : 'test@gmail.com',
             'phone' => $billing_phone ? $billing_phone : '1234567890',
-            'city' => $city ? $city : '',
+            'city' => $city ? $city : 'Noida',
             'country' => $country ? $country : 'IN',
-            'state' => $state ? $state : '',
-            'postcode' => $postcode ? $postcode : '',
+            'state' => $state ? $state : 'UP',
+            'postcode' => $postcode ? $postcode : '201301',
             'logged_in' => $customer_id ? true : false
         );
         $addresses['billing'] = $billing_data;
@@ -196,7 +213,7 @@ class PayuCartExpressCheckout
     {
         if (!is_checkout()) {
             // Enqueue your script
-            wp_enqueue_script('custom-cart-script', plugins_url('assets/js/script.js', dirname(__FILE__)), array('jquery'), '1.0.0',false);
+            wp_enqueue_script('custom-cart-script', plugins_url('assets/js/script.js', dirname(__FILE__)), array('jquery'), '1.0.0', false);
             // Pass parameters to the script
             wp_localize_script('custom-cart-script', 'wc_checkout_params', array(
                 'ajax_url' => WC()->ajax_url(),
@@ -225,7 +242,7 @@ class PayuCartExpressCheckout
                 wp_redirect($cart_url);
                 exit;
         ?>
-            <?php
+<?php
             }
         }
     }
@@ -364,9 +381,8 @@ class PayuCartExpressCheckout
 
     public function woocommerce_product_needs_shipping_enable()
     {
-        return is_cart()?false:true;
+        return is_cart() ? false : true;
     }
-
 }
 
 $payu_cart_express_checkout = new PayuCartExpressCheckout();

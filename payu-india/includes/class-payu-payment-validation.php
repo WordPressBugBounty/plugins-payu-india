@@ -180,7 +180,7 @@ class PayuPaymentValidation
 	{
 		global $woocommerce;
 		$txnid = $postdata['txnid'];
-		$order_id = $order->ID;
+		$order_id = $order->id;
 		$amount = $postdata['amount'];
 		$additionalCharges = 0;
 
@@ -354,6 +354,7 @@ class PayuPaymentValidation
 			$url = ($this->gatewayModule == 'sandbox') ?
 				PAYU_POSTSERVICE_FORM_2_URL_UAT :
 				PAYU_POSTSERVICE_FORM_2_URL_PRODUCTION;
+				
 			$response = $this->sendVerificationRequest($url, $payu_key, $txnid, $payu_salt);
 
 			if (!$response || !isset($response['body'])) {
@@ -371,8 +372,13 @@ class PayuPaymentValidation
 			}
 
 			// reconcile offer data
-			$transaction_offer = json_decode($transaction_details['transactionOffer']);
-			$this->reconcileOfferData($transaction_offer, $order);
+			// $transaction_offer = json_decode($transaction_details['transactionOffer']);
+			// $this->reconcileOfferData($transaction_offer, $order);
+			$transaction_offer = isset($transaction_details['transactionOffer']) ?
+            json_decode($transaction_details['transactionOffer'], true) : null;
+			if ($transaction_offer) {
+				$this->reconcileOfferData($transaction_offer, $order);
+			}
 			$verify_flag = strtolower($transaction_details['status']) == 'success';
 		} catch (Exception $e) {
 			$verify_flag = false;

@@ -12,9 +12,18 @@ class PayuAccountAddressSync extends PayuPaymentGatewayAPI
     public function __construct()
     {
         $plugin_data = get_option('woocommerce_payubiz_settings');
-        $this->payu_salt = $plugin_data['currency1_payu_salt'];
-        $this->gateway_module = $plugin_data['gateway_module'];
-        $this->payu_key = $plugin_data['currency1_payu_key'];
+        
+        if(is_array($plugin_data)){
+            $this->payu_salt = $plugin_data['currency1_payu_salt'];
+            $this->gateway_module = $plugin_data['gateway_module'];
+            $this->payu_key = $plugin_data['currency1_payu_key'];
+        }
+        else {
+            $this->payu_salt = '';
+            $this->gateway_module = '';
+            $this->payu_key = '';
+        }
+       
 
         add_action("woocommerce_after_save_address_validation", array($this, 'schedule_account_address_push'), 1, 2);
         add_action('pass_arguments_to_save_address', array($this, 'payu_save_address_callback'), 10, 3);

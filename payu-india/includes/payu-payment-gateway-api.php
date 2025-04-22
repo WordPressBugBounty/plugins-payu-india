@@ -30,7 +30,7 @@ class PayuPaymentGatewayAPI
             $this->payu_salt = $plugin_data['currency1_payu_salt'];
             $this->gateway_module = $plugin_data['gateway_module'];
             $this->payu_key = $plugin_data['currency1_payu_key'];
-            $order_id = $order->ID;
+            $order_id = $order->id;
             if (!$amount) {
                 $amount = $order->get_total();
             }
@@ -112,7 +112,7 @@ class PayuPaymentGatewayAPI
         global $table_prefix, $wpdb;
         try {
 
-            $order_id = $order->ID;
+            $order_id = $order->id;
             $wc_orders = 'wc_orders';
             $wp_order_table = $table_prefix . "$wc_orders ";
             $payu_refund_transactions = 'payu_refund_transactions';

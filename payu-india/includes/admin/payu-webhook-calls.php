@@ -14,8 +14,16 @@ class PayuWebhookCalls
 
 		add_action('rest_api_init', array(&$this, 'getPaymentFailedUpdate'));
 
-		$plugin_data = get_option('woocommerce_payubiz_settings');
-		$this->currency1_payu_salt = sanitize_text_field($plugin_data['currency1_payu_salt']);
+		// $plugin_data = get_option('woocommerce_payubiz_settings');
+		// $this->currency1_payu_salt = sanitize_text_field($plugin_data['currency1_payu_salt']);
+		   $plugin_data = get_option('woocommerce_payubiz_settings');
+		   
+			if ( is_array( $plugin_data ) && isset( $plugin_data['currency1_payu_salt'] ) ) {
+				$this->currency1_payu_salt = sanitize_text_field( $plugin_data['currency1_payu_salt'] );
+			} else {
+				error_log( 'Error: currency1_payu_salt not found in the plugin settings.' );
+				$this->currency1_payu_salt = '';
+			}
 	}
 
 
@@ -83,7 +91,7 @@ class PayuWebhookCalls
 						'transaction_id' => $payu_id
 					),
 					array(
-						'order_id' => $order->ID
+						'order_id' => $order->id
 					)
 				);
 			}

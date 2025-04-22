@@ -17,11 +17,21 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
         if ($call_order_hooks) {
 
             $plugin_data = get_option('woocommerce_payubiz_settings');
-            $this->enable_refund = $plugin_data['enable_refund'];
-            $this->payu_enable = $plugin_data['enabled'];
-            $this->payu_salt = $plugin_data['currency1_payu_salt'];
-            $this->gateway_module = $plugin_data['gateway_module'];
-            $this->payu_key = $plugin_data['currency1_payu_key'];
+
+            if(is_array($plugin_data)){
+                $this->enable_refund = $plugin_data['enable_refund'];
+                $this->payu_enable = $plugin_data['enabled'];
+                $this->payu_salt = $plugin_data['currency1_payu_salt'];
+                $this->gateway_module = $plugin_data['gateway_module'];
+                $this->payu_key = $plugin_data['currency1_payu_key'];
+            } else {
+                $this->enable_refund = '';
+                $this->payu_enable = '';
+                $this->payu_salt = '';
+                $this->gateway_module = '';
+                $this->payu_key = '';
+            }
+           
             if ($this->enable_refund == 'yes' && $this->payu_enable == 'yes') {
                 // Hook into the order details page to display the refund form
                 add_action('woocommerce_order_details_after_order_table', array(&$this, 'custom_refund_form'));
@@ -77,7 +87,7 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
         if (!sizeof($order->get_refunds()) && ($order_status == 'processing' || $order_status == 'completed')) {
             $full_refund_form = '<form method="post" id="payu_refund_form">';
             $full_refund_form .= '<input type="hidden" name="custom_refund_order_id"
-            value="' . esc_attr($order->ID) . '">';
+            value="' . esc_attr($order->id) . '">';
             $full_refund_form .=  wp_nonce_field(
                 'payu_full_refund_payment_nonce',
                 'payu_full_refund_payment_nonce',
@@ -129,7 +139,7 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
 
         if (isset($_POST['custom_refund_submit'])) {
             // Process refund using payment gateway API
-            $order_id = $order->ID;
+            $order_id = $order->id;
             $refund_amount = $order->get_total();
             $refund_reason = 'Customer request';
             if (
@@ -196,7 +206,7 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
             )
         ) {
 
-            $order_id = $order->ID;
+            $order_id = $order->id;
             $refund_reason = 'Customer request';
             $payu_coupon_value = get_payu_coupon_value($order);
             $refunded_item_ids = $this->payu_refund_item_ids($order);

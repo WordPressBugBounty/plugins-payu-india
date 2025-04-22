@@ -43,8 +43,9 @@ class WcPayubiz extends WC_Payment_Gateway
 		$this->has_fields = false;
 		$this->init_form_fields();
 		$this->init_settings();
-		$this->title = 'PayUBiz';
-		$this->supports             = array('products', 'refunds');
+		$this->title = __('Credit/Debit Card & NetBanking Payment', 'payubiz');
+		$this->method_description = __('Enable secure payments through PayU using (Credit/Debit Cards, NetBanking, UPI, and Wallets).', 'payubiz');		
+		$this->supports  = array('products', 'refunds');
 		$this->description = sanitize_text_field($this->settings['description']);
 		$this->checkout_express = sanitize_text_field($this->settings['checkout_express']);
         //$this->dynamic_charges_flag = sanitize_text_field($this->settings['dynamic_charges_flag']);
@@ -293,8 +294,11 @@ class WcPayubiz extends WC_Payment_Gateway
 		$order->calculate_totals();
 		//do we have a phone number?
 		//get currency
-		$address = sanitize_text_field($order->billing_address_1); {
-		$address = $address . ' ' . sanitize_text_field($order->billing_address_2);
+		// $address = sanitize_text_field($order->billing_address_1); {
+		// $address = $address . ' ' . sanitize_text_field($order->billing_address_2);
+		// }
+		$address = sanitize_text_field($order->get_billing_address_1()); {
+		$address = $address . ' ' . sanitize_text_field($order->get_billing_address_2());
 		}
 
 		$sku_details = $this->payuGetOrderSkuDetails($order);
@@ -347,15 +351,19 @@ class WcPayubiz extends WC_Payment_Gateway
 			$email_required = false;
 		}
 		$billing_email = $order->billing_email ? sanitize_email($order->billing_email) : '';
-		$email = $user_email ? $user_email : $billing_email;
-		$phone = $payu_phone ? $payu_phone : sanitize_text_field($order->billing_phone);
+		//$email = $user_email ? $user_email : $billing_email;
+		$email = isset($user_email) ? $user_email : $billing_email;
+		$phone = isset($payu_phone) ? $payu_phone : sanitize_text_field($order->billing_phone);
+		//$phone = $payu_phone ? $payu_phone : sanitize_text_field($order->billing_phone);
         if(strlen($phone)>10){
         $phone = substr($phone, -10);    
         } 
 		$get_state_list = get_state_list();
 		$state = $get_state_list[sanitize_text_field($order->billing_state)];
-		$city = sanitize_text_field($order->billing_city);
-		$country = sanitize_text_field($order->billing_country);
+		$city = $order->billing_city ? sanitize_email($order->billing_city) : '';
+		// $city = sanitize_text_field($order->billing_city);
+		// $country = sanitize_text_field($order->billing_country);
+		$country = $order->billing_country ? sanitize_email($order->billing_country) : '';
 		$pG = '';
 		$udf5 = 'WooCommerce';
 		$hash = $this->generateHashToken($txnid, $amount, $productInfo, $firstname, $email, $udf4, $udf5);
@@ -400,14 +408,14 @@ class WcPayubiz extends WC_Payment_Gateway
             //$tax_info_data=$order->order_total-$order->get_subtotal();
             $tax_info_data=WC()->cart->get_total_tax();
             //$tax_info_data=round($tax_info_data, 2);            
-            $taxinfo=array(
+            $taxinfo= array(
                 'breakup'=>array( 
                     'Standard' => "$tax_info_data"
                 ),
                 'total'=> "$tax_info_data" 
             );  
 
-            $order_amount = 0;
+			$order_amount = 0;
             if($payu_dynamic_charges_flag=="no"){
                 if(wc_prices_include_tax()){
                     $taxinfo=NULL;
@@ -422,14 +430,23 @@ class WcPayubiz extends WC_Payment_Gateway
                 $taxinfo=NULL;
                 $order_amount  = $order->get_subtotal();               
             }
-            
+			// echo "team working please wait";
+			// echo wc_prices_include_tax();
+			// echo  $payu_dynamic_charges_flag;
+
+			// exit;
             
             if($payu_dynamic_charges_flag=="yes" && wc_prices_include_tax()){
                 $order_amount  = $order->order_total;
                 $amount  = $order->order_total;
             }            
             $amount=str_replace(",", "", $amount);
-            
+			
+			if (empty($email)) {
+                $email = 'guest_' . uniqid() . '@payu.in';
+                error_log('Email not found, setting default email: ' . $email);
+            }
+        
 			$data_array = array(
 				'key' => $payu_key,
 				'hash' => $hash,
@@ -486,20 +503,26 @@ class WcPayubiz extends WC_Payment_Gateway
 	{
 
 		$productInfo = '';
-		$logo = 'https://payu.in/demo/checkoutExpress/utils/images/MicrosoftTeams-image%20(31).png'; 
+
+		$default_Payu_logo = 'https://devguide.payu.in/website-assets/uploads/2021/12/new-payu-logo.svg'; 
         
 		foreach ($order->get_items() as $item) {
             $variation_id = $item->get_variation_id();
             $_product = new WC_Product_Variation($variation_id);
-            $single_sku_price=$_product->get_price();
+            $single_sku_price= (float) $_product->get_price();
             $single_sku_name=$_product->get_name();
             $single_sku=$_product->get_sku();
             $single_sku=($single_sku!="") ? $single_sku : $variation_id;
             $single_sku_price=str_replace(",", "", $single_sku_price);
 			$product = wc_get_product($item->get_product_id());
 			$productInfo .= $product->get_sku() . ':';
-            $amount_per_sku=(string)number_format($product->get_price(), 2);
+            // $amount_per_sku= number_format($product->get_price(), 2);
+            $amount_per_sku= (float)$product->get_price();
+
             $amount_per_sku=str_replace(",", "", $amount_per_sku);
+
+			$product_image = wp_get_attachment_url($_product->get_image_id());
+			$logo = $product_image ? $product_image : $default_Payu_logo;
             if($variation_id==0){
                 $sku_id=($product->get_sku()!="") ? $product->get_sku():$product->get_id();
                 $amount_per_sku=$amount_per_sku;
@@ -510,6 +533,7 @@ class WcPayubiz extends WC_Payment_Gateway
              $amount_per_sku=$single_sku_price;
              $product_name=$single_sku_name;                 
             }
+
             $sku_details_array[] = array(
 				'offer_key' => array(),
 				'amount_per_sku' => $amount_per_sku,
@@ -530,10 +554,12 @@ class WcPayubiz extends WC_Payment_Gateway
 		return array('sku_details_array' => $sku_details_array, 'product_info' => $productInfo);
 	}
 
+	
+
 	private function payuRedirectMethod($args_redirect)
 	{
 		return '<form action="' . esc_url($args_redirect['action']) . '" method="post" id="payu_form" name="payu_form">
-				' . esc_html($args_redirect['payu_payment_nonce']) . '
+				' .  wp_nonce_field('payu_payment_nonce', 'payu_payment_nonce', true, false) . '
 				<input type="hidden" name="key" value="' . esc_attr($args_redirect['key']) . '" />
 				<input type="hidden" name="txnid" value="' . esc_attr($args_redirect['txnid']) . '" />
 				<input type="hidden" name="amount" value="' . esc_attr($args_redirect['amount']) . '" />

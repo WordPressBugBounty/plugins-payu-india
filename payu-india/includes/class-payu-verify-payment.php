@@ -12,10 +12,21 @@ class PayuVerifyPayments extends WcPayubiz
     {
 
         $plugin_data = get_option('woocommerce_payubiz_settings');
-        $this->gateway_module = $plugin_data['gateway_module'];
-        $this->payu_salt = $plugin_data['currency1_payu_salt'];
-        $this->payu_key = $plugin_data['currency1_payu_key'];
+        // $this->gateway_module = $plugin_data['gateway_module'];
+        // $this->payu_salt = $plugin_data['currency1_payu_salt'];
+        // $this->payu_key = $plugin_data['currency1_payu_key'];
 
+        if ( is_array( $plugin_data ) ) {
+            $this->gateway_module = $plugin_data['gateway_module'];
+            $this->payu_salt = $plugin_data['currency1_payu_salt'];
+            $this->payu_key = $plugin_data['currency1_payu_key'];
+        } else {
+            error_log( 'Error: $plugin_data is not an array.' );
+            $this->gateway_module = '';
+            $this->payu_salt = '';
+            $this->payu_key = '';
+        }
+        
         // add the 5-minute interval
         add_filter('cron_schedules', array($this, 'cron_add_one_min'));
 
@@ -47,7 +58,19 @@ class PayuVerifyPayments extends WcPayubiz
     function passArgumentstoVerify($order, $schedule_time, $expiry_time)
     {
         global $wpdb;
-        $order = unserialize($order);
+        // $order = unserialize($order);
+        if (is_string($order)) {
+            $order = unserialize($order);
+        }
+   
+        if (!$order instanceof WC_Order) {
+            $order = wc_get_order($order);
+        }
+   
+        if (!$order) {
+            error_log("Invalid order object.");
+            return;
+        }
         $order_status  = $order->get_status(); // Get the order status
 
         // Check if the order status indicates cancellation or failure
@@ -84,7 +107,7 @@ class PayuVerifyPayments extends WcPayubiz
         $method = $order->get_payment_method();
         if ($method == 'payubiz') {
             // Handle expired order logic here
-            $order_id = $order->ID;
+            $order_id = $order->id;
             $refund_amount = $order->get_total();
             $refund_reason = 'Order not confirmed';
             $refund_id = wc_create_refund(array(
@@ -108,9 +131,9 @@ class PayuVerifyPayments extends WcPayubiz
     {
         // Handle payubiz payment logic here
         $plugin_data = get_option('woocommerce_payubiz_settings');
-        $txnid = get_post_meta($order->ID, 'order_txnid', true);
+        $txnid = get_post_meta($order->id, 'order_txnid', true);
         if ($txnid) {
-            $this->insert_cron_data($order->ID, $txnid, 'pending');
+            $this->insert_cron_data($order->id, $txnid, 'pending');
             $payuPaymentValidation = new PayuPaymentValidation();
             $verify_status = $payuPaymentValidation->verifyPayment(
                 $order,
@@ -125,7 +148,7 @@ class PayuVerifyPayments extends WcPayubiz
             }
             if ($verify_status) {
                 $order->payment_complete();
-                error_log("order marked completed by scheduler  $order->ID");
+                error_log("order marked completed by scheduler  $order->id");
                 $order_new = serialize($order);
                 $this->clearScheduledTask($order_new, $schedule_time, $expiry_time);
             }
