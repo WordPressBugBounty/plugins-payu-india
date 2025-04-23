@@ -3,7 +3,7 @@ Contributors:
 Donate Link:
 Tags: payment, gateway, payu
 Requires at least: 5.3
-Tested up to: 6.7.1
+Tested up to: 6.8
 Stable tag: 3.8.5
 Requires PHP: 7.4
 License: GPLv2 or later
