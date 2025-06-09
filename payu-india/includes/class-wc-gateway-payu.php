@@ -358,8 +358,11 @@ class WcPayubiz extends WC_Payment_Gateway
         if(strlen($phone)>10){
         $phone = substr($phone, -10);    
         } 
+		// $get_state_list = get_state_list();
+		// $state = $get_state_list[sanitize_text_field($order->billing_state)];
 		$get_state_list = get_state_list();
-		$state = $get_state_list[sanitize_text_field($order->billing_state)];
+		$billing_state_key = sanitize_text_field($order->billing_state);
+		$state = isset($get_state_list[$billing_state_key]) ? $get_state_list[$billing_state_key] : '';
 		$city = $order->billing_city ? sanitize_email($order->billing_city) : '';
 		// $city = sanitize_text_field($order->billing_city);
 		// $country = sanitize_text_field($order->billing_country);

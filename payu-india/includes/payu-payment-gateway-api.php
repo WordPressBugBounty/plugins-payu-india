@@ -295,8 +295,11 @@ class PayuPaymentGatewayAPI
                     'x-credential-username' => $this->payu_key
                 );
 
+                // $get_state_list = get_state_list();
+		        // $state = $get_state_list[$address[$address_type . '_state']];
                 $get_state_list = get_state_list();
-		        $state = $get_state_list[$address[$address_type . '_state']];
+                $state_key = $address[$address_type . '_state'] ?? null;
+                $state = $state_key && isset($get_state_list[$state_key]) ? $get_state_list[$state_key] : '';
 
                 // Request body
                 $body = wp_json_encode(array(

@@ -305,18 +305,18 @@ class PayuShippingTaxApiCalc
 
     public function payu_generate_get_user_token()
     {
-        // register_rest_route('payu/v1', '/generate-user-token', array(
-        //     'methods' => ['POST'],
-        //     'callback' => array($this, 'payu_generate_user_token_callback'),
-        //     'permission_callback' => '__return_true'
-        // ));
         register_rest_route('payu/v1', '/generate-user-token', array(
             'methods' => ['POST'],
             'callback' => array($this, 'payu_generate_user_token_callback'),
-            'permission_callback' => function () {
-                return is_user_logged_in();
-            }
+            'permission_callback' => '__return_true'
         ));
+        // register_rest_route('payu/v1', '/generate-user-token', array(
+        //     'methods' => ['POST'],
+        //     'callback' => array($this, 'payu_generate_user_token_callback'),
+        //     'permission_callback' => function () {
+        //         return is_user_logged_in();
+        //     }
+        // ));
     }
 
     public function payu_generate_user_token_callback(WP_REST_Request $request)

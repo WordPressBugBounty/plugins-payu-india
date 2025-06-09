@@ -306,7 +306,8 @@ class PayuCartExpressCheckout
 
     public function add_custom_order_total_row($total_rows, $order)
     {
-        if ($total_rows['payment_method']['value'] == 'PayUBiz') {
+        // if ($total_rows['payment_method']['value'] == 'PayUBiz') {
+        if (isset($total_rows['payment_method']['value']) && $total_rows['payment_method']['value'] === 'PayUBiz') {
             $payment_mode['payment_mode'] = array(
                 'label' => __('Payment Mode', 'your-text-domain'),
                 'value' => $order->get_meta('payu_mode'),
