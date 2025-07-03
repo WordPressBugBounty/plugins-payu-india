@@ -14,7 +14,7 @@ class PayuShippingTaxApiCalc
     {
 
         add_action('rest_api_init', array(&$this, 'getPaymentFailedUpdate'));
-        add_action('rest_api_init', array($this, 'payu_generate_get_user_token'));
+        // add_action('rest_api_init', array($this, 'payu_generate_get_user_token'));
     }
 
 
@@ -29,17 +29,35 @@ class PayuShippingTaxApiCalc
 
     public function payuShippingCostCallback(WP_REST_Request $request)
     {
-        $parameters = json_decode($request->get_body(), true);
-        error_log('shipping api call request ' . $request->get_body());
 
-        $email = sanitize_email($parameters['email']);
-        $txnid = sanitize_text_field($parameters['txnid']);
+        // Get the raw JSON request body
+        $raw_json_body = $request->get_body();
+        error_log('Raw Json Body: ' . $raw_json_body);
 
-        $auth = apache_request_headers();
-        $token = $auth['Auth-Token'];
+        // Decode body
+        $parameters = json_decode($raw_json_body, true);
+
+        // error_log('json Decode Body ' . $parameters);
+        // Basic validation
+        if (!is_array($parameters)) {
+            return new WP_REST_Response([
+                'status' => false,
+                'message' => 'Invalid JSON body.',
+            ], 400);
+        }
+
+        // Sanitize inputs
+        $email = sanitize_email($parameters['email'] ?? '');
+        $txnid = sanitize_text_field($parameters['txnid'] ?? '');
+
+        // Get headers
+        $headers = apache_request_headers();
+        $token = $headers['Auth-Token'] ?? '';
+
+        error_log('First token : ' . $token);
 
         try {
-            if ($token && $this->payu_validate_authentication_token(PAYU_USER_TOKEN_EMAIL, $token)) {
+            if ($token && $this->payu_validate_authentication_token($raw_json_body, $token)) {
                 $response = $this->handleValidToken($parameters, $email, $txnid);
             } else {
                 $response = [
@@ -76,8 +94,9 @@ class PayuShippingTaxApiCalc
 
         $session_key = $parameters['udf4'];
         $order_string = explode('_', $txnid);
-        $order_id = (int)$order_string[0];
+        $order_id = (int) $order_string[0];
         $order = wc_get_order($order_id);
+        // error_log(var_dump($order , true ));
 
         $shipping_address = $parameters['address'];
         if (!$email) {
@@ -94,13 +113,13 @@ class PayuShippingTaxApiCalc
                 $user = get_user_by('email', $email);
                 $user_id = $user->ID;
                 $this->payu_add_new_guest_user_cart_data($user_id, $session_key);
-                $this->update_order_shipping_address($order, $shipping_address, $email);
+                $order = $this->update_order_shipping_address($order, $shipping_address, $email);
                 $shipping_data = $this->update_cart_data($user_id, $order);
             } else {
                 $user_id = $this->payu_create_guest_user($email);
                 if ($user_id) {
                     $this->payu_add_new_guest_user_cart_data($user_id, $session_key);
-                    $this->update_order_shipping_address($order, $shipping_address, $email);
+                    $order = $this->update_order_shipping_address($order, $shipping_address, $email);
                     $shipping_data = $this->update_cart_data($user_id, $order);
                 }
             }
@@ -126,16 +145,23 @@ class PayuShippingTaxApiCalc
     // Helper function to update shipping address
     public function update_order_shipping_address($order, $new_address, $email)
     {
-        // Implement your logic to update the shipping address
-        // You might use the wc_update_order function or any other method
+        // Print new_address before anything else
+        error_log('Received new_address: ' . json_encode($new_address));
 
-        // Example using wc_update_order:
-        $order->set_shipping_address($new_address);
+        // Validate order object
+        if (!$order || !is_a($order, 'WC_Order')) {
+            error_log('Invalid order object');
+            return false;
+        }
+
+        // Update addresses properly
         $order->set_address($new_address, 'shipping');
         $order->set_address($new_address, 'billing');
-        error_log('set order address ' . json_encode($new_address));
         $order->set_billing_email($email);
-        $order->save();
+
+        error_log('Updated order address: ' . json_encode($new_address));
+
+        return $order;
     }
 
     public function update_cart_data($user_id, $order)
@@ -183,38 +209,15 @@ class PayuShippingTaxApiCalc
             WC()->customer->set_shipping_postcode($order->get_shipping_postcode());
             WC()->customer->set_shipping_address_1($order->get_shipping_address_1());
             WC()->cart = new WC_Cart();
-            // wp_set_current_user($user_id);
-            // wp_set_auth_cookie($user_id);
-            // if (!empty($_POST['username']) && !empty($_POST['password'])) {
-            // 	$username = sanitize_text_field($_POST['username']);
-            // 	$password = $_POST['password']; // Password should not be sanitized
 
-            // 	// Authenticate the user
-            // 	$user = wp_authenticate($username, $password);
-
-            // 	if (is_wp_error($user)) {
-            // 		// Handle authentication failure
-            // 		echo 'Invalid credentials';
-            // 	} else {
-            // 		$user_id = $user->ID;
-
-            // 		// Set the current user and authentication cookie
-            // 		wp_set_current_user($user_id);
-            // 		wp_set_auth_cookie($user_id);
-
-            // 		echo 'User authenticated and logged in';
-            // 	}
-            // }
             // Authenticate user
             if (is_user_logged_in()) {
                 $current_user = wp_get_current_user();
                 $user_id = $current_user->ID;
                 wp_set_current_user($user_id);
-                wp_set_auth_cookie($user_id);
             } elseif (!empty($user_id)) {
                 // Set session for already created/registered user
                 wp_set_current_user($user_id);
-                wp_set_auth_cookie($user_id);
             }
 
             WC()->cart->calculate_totals();
@@ -229,45 +232,45 @@ class PayuShippingTaxApiCalc
                         WC()->session->set('chosen_shipping_methods', array($shipping_rate->id));
                         WC()->cart->calculate_totals();
                         foreach (WC()->cart->get_tax_totals() as $tax) {
-                            $tax_amount   = $tax->amount + $tax_amount;
+                            $tax_amount = $tax->amount + $tax_amount;
                         }
 
-                        $shipping_data[$shipping_method_count]['carrier_code']   = $shipping_rate->id;
-                        $shipping_data[$shipping_method_count]['method_code']   = $shipping_rate->get_method_id();
-                        $shipping_data[$shipping_method_count]['carrier_title']  = $shipping_rate->get_label();
-                        $shipping_data[$shipping_method_count]['amount']        = $shipping_rate->get_cost();
-                        $shipping_data[$shipping_method_count]['error_message']        = "";
+                        $shipping_data[$shipping_method_count]['carrier_code'] = $shipping_rate->id;
+                        $shipping_data[$shipping_method_count]['method_code'] = $shipping_rate->get_method_id();
+                        $shipping_data[$shipping_method_count]['carrier_title'] = $shipping_rate->get_label();
+                        $shipping_data[$shipping_method_count]['amount'] = $shipping_rate->get_cost();
+                        $shipping_data[$shipping_method_count]['error_message'] = "";
                         $plugin_data = get_option('woocommerce_payubiz_settings');
                         $payu_dynamic_charges_flag = $plugin_data['dynamic_charges_flag'];
 
                         if ($payu_dynamic_charges_flag == "yes" && wc_prices_include_tax()) {
                             if (WC()->cart->get_shipping_tax()) {
-                                $shipping_data[$shipping_method_count]['tax_price']    = round(WC()->cart->get_shipping_tax(), 2);
+                                $shipping_data[$shipping_method_count]['tax_price'] = round(WC()->cart->get_shipping_tax(), 2);
                                 $shipping_data[$shipping_method_count]['tax_price_inclusive'] = round($tax_amount, 2);
                             } else {
-                                $shipping_data[$shipping_method_count]['tax_price']    = 0;
+                                $shipping_data[$shipping_method_count]['tax_price'] = 0;
                                 $shipping_data[$shipping_method_count]['tax_price_inclusive'] = round($tax_amount, 2);
                             }
                         } else {
-                            $shipping_data[$shipping_method_count]['tax_price']    = round($tax_amount, 2);
+                            $shipping_data[$shipping_method_count]['tax_price'] = round($tax_amount, 2);
                         }
 
-                        $shipping_data[$shipping_method_count]['subtotal']   = WC()->cart->get_subtotal();
-                        $shipping_data[$shipping_method_count]['grand_total']   = round(WC()->cart->get_subtotal() + $shipping_rate->get_cost() + $tax_amount, 2);
+                        $shipping_data[$shipping_method_count]['subtotal'] = WC()->cart->get_subtotal();
+                        $shipping_data[$shipping_method_count]['grand_total'] = round(WC()->cart->get_subtotal() + $shipping_rate->get_cost() + $tax_amount, 2);
                         $shipping_method_count++;
                     }
                 } else if (WC()->cart->get_tax_totals()) {
                     foreach (WC()->cart->get_tax_totals() as $tax) {
-                        $tax_amount   = $tax->amount + $tax_amount;
+                        $tax_amount = $tax->amount + $tax_amount;
                     }
-                    $shipping_data[0]['carrier_code']   = '';
-                    $shipping_data[0]['method_code']   = '';
-                    $shipping_data[0]['carrier_title']  = '';
-                    $shipping_data[0]['amount']        = '';
-                    $shipping_data[0]['error_message']        = "";
-                    $shipping_data[0]['tax_price']    = $tax_amount;
-                    $shipping_data[0]['subtotal']   = WC()->cart->get_subtotal();
-                    $shipping_data[0]['grand_total']   = WC()->cart->get_subtotal() + $tax_amount;
+                    $shipping_data[0]['carrier_code'] = '';
+                    $shipping_data[0]['method_code'] = '';
+                    $shipping_data[0]['carrier_title'] = '';
+                    $shipping_data[0]['amount'] = '';
+                    $shipping_data[0]['error_message'] = "";
+                    $shipping_data[0]['tax_price'] = $tax_amount;
+                    $shipping_data[0]['subtotal'] = WC()->cart->get_subtotal();
+                    $shipping_data[0]['grand_total'] = WC()->cart->get_subtotal() + $tax_amount;
                 }
             }
         }
@@ -301,102 +304,35 @@ class PayuShippingTaxApiCalc
         $cart_data['cart'] = maybe_unserialize(maybe_unserialize($wc_session_data)['cart']);
         update_user_meta($user_id, '_woocommerce_persistent_cart_1', $cart_data);
     }
-
-
-    public function payu_generate_get_user_token()
-    {
-        register_rest_route('payu/v1', '/generate-user-token', array(
-            'methods' => ['POST'],
-            'callback' => array($this, 'payu_generate_user_token_callback'),
-            'permission_callback' => '__return_true'
-        ));
-        // register_rest_route('payu/v1', '/generate-user-token', array(
-        //     'methods' => ['POST'],
-        //     'callback' => array($this, 'payu_generate_user_token_callback'),
-        //     'permission_callback' => function () {
-        //         return is_user_logged_in();
-        //     }
-        // ));
-    }
-
-    public function payu_generate_user_token_callback(WP_REST_Request $request)
-    {
-        // Get and sanitize the email from request
-        $email = sanitize_email($request->get_param('email'));
-
-        if (!$email || !is_email($email)) {
-            return new WP_REST_Response([
-                'status' => false,
-                'data' => [],
-                'message' => 'Invalid email address provided.',
-            ], 400); // 400 Bad Request
-        }
-
-        // Fetch plugin settings
-        $plugin_data = get_option('woocommerce_payubiz_settings');
-        $this->payu_salt = isset($plugin_data['currency1_payu_salt']) ? sanitize_text_field($plugin_data['currency1_payu_salt']) : null;
-
-        if (!$this->payu_salt) {
-            return new WP_REST_Response([
-                'status' => false,
-                'data' => [],
-                'message' => 'Plugin configuration is missing.',
-            ], 500); // 500 Internal Server Error
-        }
-
-        // Check if the user exists
-        if (email_exists($email)) {
-            $user = get_user_by('email', $email);
-            $user_id = $user->ID;
-
-            // Generate authentication token
-            $token = $this->payu_generate_authentication_token($user_id);
-
-            return new WP_REST_Response([
-                'status' => true,
-                'data' => ['token' => $token],
-                'message' => 'Token Generated',
-            ]);
-        } else {
-            return new WP_REST_Response([
-                'status' => false,
-                'data' => [],
-                'message' => "Account does not exist for this email: $email",
-            ], 404); // 404 Not Found
-        }
-    }
-
-
-    private function payu_generate_authentication_token($user_id)
+    private function payu_validate_authentication_token($request_body, $token)
     {
 
-        $expiration = get_user_meta($user_id, 'payu_auth_token_expiration', true);
-        $stored_token = get_user_meta($user_id, 'payu_auth_token', true);
+        // Get saved plugin settings
+        $plugin_settings = get_option('woocommerce_payubiz_settings');
+        // Get Key and Salt
+        $api_key = $plugin_settings['currency1_payu_key'] ?? '';
+        $salt = $plugin_settings['currency1_payu_salt'] ?? '';
 
-        if ($expiration >= time() && $stored_token) {
-            return $stored_token;
+        // Ensure required values exist
+        if (empty($api_key) || empty($salt)) {
+            error_log("key and salt are empty");
+            return false;
         }
 
-        $random_bytes = random_bytes(50);
-        $hashed_token = bin2hex($random_bytes);
+        // Build string to hash
+        $data_string = $request_body . '|' . $api_key . '|' . $salt;
 
-        // Set the expiration time to 24 hours from now
-        $expiration = time() + 24 * 60 * 60;
-        // Save the token and expiration time in user meta
-        update_user_meta($user_id, 'payu_auth_token', $hashed_token);
-        update_user_meta($user_id, 'payu_auth_token_expiration', $expiration);
+        // Generate hash
+        $generated_hash = hash('sha512', $data_string);
+        $generated_hash = trim($generated_hash);
+        $token = trim($token);
+        // Compare hashes
+        if ($generated_hash === $token) {
+            return true;
+        }
 
-        return $hashed_token;
-    }
-
-    private function payu_validate_authentication_token($email, $token)
-    {
-        $user_id = get_user_by('email', $email)->ID;
-        // Get the stored token and expiration time from user meta
-        $stored_token = get_user_meta($user_id, 'payu_auth_token', true);
-        $expiration = get_user_meta($user_id, 'payu_auth_token_expiration', true);
-        // Check if the stored token matches the provided token and is not expired
-        return ($stored_token === $token && $expiration >= time()) ? true : false;
+        error_log('Hash mismatch');
+        return false;
     }
 }
 $payu_shipping_tax_api_calc = new PayuShippingTaxApiCalc();

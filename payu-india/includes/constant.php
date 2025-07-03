@@ -22,3 +22,4 @@ define('CURL_CONTENT_TYPE','application/x-www-form-urlencoded');
 define('CURL_CONTENT_TYPE_JSON','application/json');
 $woocommerce_version = get_option('woocommerce_version');
 define('WOOCOMMERCE_CURRENT_VERSION',$woocommerce_version);
+define('COMMERCEPRO_APP_VERSION' , '3.8');

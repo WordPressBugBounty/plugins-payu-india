@@ -59,24 +59,29 @@ class PayuPaymentValidation
 
 	private function manageMessages()
 	{
+		// Check if the function wc_add_notice is available
 		if (function_exists('wc_add_notice')) {
-			wc_clear_notices();
+			// Make sure WooCommerce is fully loaded before clearing notices
+			if (function_exists('wc_clear_notices')) {
+				wc_clear_notices(); // Clear existing notices
+			}
+			// Only add the notice if the class is not 'success'
 			if ($this->msg['class'] != 'success') {
 				wc_add_notice($this->msg['message'], $this->msg['class']);
 			}
 		} else {
+			// Fallback to global $woocommerce if wc_add_notice is not available
 			global $woocommerce;
+			// Check if the WooCommerce object exists and the add_error method is available
 			if ($this->msg['class'] != 'success') {
 				if (is_object($woocommerce) && method_exists($woocommerce, 'add_error')) {
 					$woocommerce->add_error($this->msg['message']);
+					// Ensure messages are properly set
 					$woocommerce->set_messages();
 				}
-				
 			}
-			
 		}
 	}
-
 
 	private function getRedirectUrl($order)
 	{
@@ -147,9 +152,9 @@ class PayuPaymentValidation
 			$order->set_shipping_first_name(isset($full_name[0]) ? $full_name[0] : '');
 			$order->set_address($new_address, 'shipping');
 			$order->set_address($new_address, 'billing');
-			foreach ( $order->get_items() as $item_id => $item ) {
+			foreach ($order->get_items() as $item_id => $item) {
 				// Calculate taxes for the item
-				 if ($item->get_type() === 'fee') {
+				if ($item->get_type() === 'fee') {
 					continue;
 				}
 				$item->calculate_taxes($new_address);
@@ -187,21 +192,21 @@ class PayuPaymentValidation
 		if (isset($postdata["additionalCharges"])) {
 			$additionalCharges = $postdata['additionalCharges'];
 		}
-        $postdata['amount']=number_format($postdata['amount'],2);
-        $postdata['amount']=str_replace(",", "", $postdata['amount']);        
-        // New code added Start for Hashkey
-        $responseRawHashString='|||||'.$postdata['udf5'].'|'.$postdata['udf4'].'|'.$postdata['udf3'].'|'.$postdata['udf2'].'|'.$postdata['udf3'].'|'.$postdata['email'].'|'.$postdata['firstname'].'|'.$postdata['productinfo'].'|'.$postdata['amount'].'|'.$postdata['txnid'].'|'.$postdata['key'];
+		$postdata['amount'] = number_format($postdata['amount'], 2);
+		$postdata['amount'] = str_replace(",", "", $postdata['amount']);
+		// New code added Start for Hashkey
+		$responseRawHashString = '|||||' . $postdata['udf5'] . '|' . $postdata['udf4'] . '|' . $postdata['udf3'] . '|' . $postdata['udf2'] . '|' . $postdata['udf3'] . '|' . $postdata['email'] . '|' . $postdata['firstname'] . '|' . $postdata['productinfo'] . '|' . $postdata['amount'] . '|' . $postdata['txnid'] . '|' . $postdata['key'];
 
-		$saltString= $payu_salt . '|' . $postdata['status'] . '|' . $responseRawHashString;
-        // New code added End for Hashkey
-        
+		$saltString = $payu_salt . '|' . $postdata['status'] . '|' . $responseRawHashString;
+		// New code added End for Hashkey
+
 		if ($additionalCharges > 0) {
 			$saltString = $additionalCharges . '|' . $payu_salt . '|' . $postdata['status'] . '|' . $responseRawHashString;
 		}
-        
+
 		$sentHashString = strtolower(hash('sha512', $saltString));
 
-        
+
 		$responseHashString = $postdata['hash'];
 
 		$this->msg['class'] = 'error';
@@ -279,10 +284,10 @@ class PayuPaymentValidation
 	{
 
 		if (!is_array($transaction_offer)) {
-            
-            $transaction_offer=array($transaction_offer);
+
+			$transaction_offer = array($transaction_offer);
 			//$transaction_offer = json_decode(str_replace('\"', '"', $transaction_offer), true);
-		} 
+		}
 		if (isset($transaction_offer['offer_data'])) {
 
 			foreach ($transaction_offer['offer_data'] as $offer_data) {
@@ -354,7 +359,7 @@ class PayuPaymentValidation
 			$url = ($this->gatewayModule == 'sandbox') ?
 				PAYU_POSTSERVICE_FORM_2_URL_UAT :
 				PAYU_POSTSERVICE_FORM_2_URL_PRODUCTION;
-				
+
 			$response = $this->sendVerificationRequest($url, $payu_key, $txnid, $payu_salt);
 
 			if (!$response || !isset($response['body'])) {
@@ -375,7 +380,7 @@ class PayuPaymentValidation
 			// $transaction_offer = json_decode($transaction_details['transactionOffer']);
 			// $this->reconcileOfferData($transaction_offer, $order);
 			$transaction_offer = isset($transaction_details['transactionOffer']) ?
-            json_decode($transaction_details['transactionOffer'], true) : null;
+				json_decode($transaction_details['transactionOffer'], true) : null;
 			if ($transaction_offer) {
 				$this->reconcileOfferData($transaction_offer, $order);
 			}
@@ -441,20 +446,20 @@ class PayuPaymentValidation
 			'postcode' => $order->get_shipping_postcode(), // (optional value)
 			'city'     => $order->get_shipping_city(), // (optional value)
 		);
-        foreach($order->get_items('shipping') as $item_id => $item) {       
-               $order->remove_item($item_id);
-        }
+		foreach ($order->get_items('shipping') as $item_id => $item) {
+			$order->remove_item($item_id);
+		}
 		$added_shipping = array();
 		foreach ($order->get_items('shipping') as $item) {
 			$method_id = $item->get_method_id();
-    		$instance_id = $item->get_instance_id();
-			$added_shipping[] = (string)$method_id.':'.$instance_id;
+			$instance_id = $item->get_instance_id();
+			$added_shipping[] = (string)$method_id . ':' . $instance_id;
 		}
-		if(!empty($added_shipping) && in_array($new_method_id,$added_shipping)){
+		if (!empty($added_shipping) && in_array($new_method_id, $added_shipping)) {
 			return;
 		}
-		
-		
+
+
 
 		$item = new WC_Order_Item_Shipping();
 		// Retrieve the customer shipping zone
@@ -487,4 +492,3 @@ class PayuPaymentValidation
 		$order->calculate_totals(); // the save() method is included
 	}
 }
-

@@ -16,17 +16,17 @@ class PayuVerifyPayments extends WcPayubiz
         // $this->payu_salt = $plugin_data['currency1_payu_salt'];
         // $this->payu_key = $plugin_data['currency1_payu_key'];
 
-        if ( is_array( $plugin_data ) ) {
+        if (is_array($plugin_data)) {
             $this->gateway_module = $plugin_data['gateway_module'];
             $this->payu_salt = $plugin_data['currency1_payu_salt'];
             $this->payu_key = $plugin_data['currency1_payu_key'];
         } else {
-            error_log( 'Error: $plugin_data is not an array.' );
+            error_log('Error: $plugin_data is not an array.');
             $this->gateway_module = '';
             $this->payu_salt = '';
             $this->payu_key = '';
         }
-        
+
         // add the 5-minute interval
         add_filter('cron_schedules', array($this, 'cron_add_one_min'));
 
@@ -48,6 +48,9 @@ class PayuVerifyPayments extends WcPayubiz
         $expiry_time = time() + 2700;
         $order = new WC_Order($order_id);
         $order_new = serialize($order);
+        if ($order->is_paid()) {
+            return;
+        }
         $args = array($order_new, $schedule_time, $expiry_time);
 
         if (!wp_next_scheduled('pass_arguments_to_verify', $args)) {
@@ -62,11 +65,11 @@ class PayuVerifyPayments extends WcPayubiz
         if (is_string($order)) {
             $order = unserialize($order);
         }
-   
+
         if (!$order instanceof WC_Order) {
             $order = wc_get_order($order);
         }
-   
+
         if (!$order) {
             error_log("Invalid order object.");
             return;
@@ -82,11 +85,17 @@ class PayuVerifyPayments extends WcPayubiz
         $now = time();
 
         // Check if the expiry time has passed
-        if ($expiry_time <= $now) {
+        // if ($expiry_time <= $now) {
+        //     $this->handleRefundExpiredOrder($order);
+        //     $this->handleCancellation($order, $schedule_time, $expiry_time);
+        //     return;
+        // }
+        if ($expiry_time <= $now && $order->get_status() === 'pending') {
             $this->handleRefundExpiredOrder($order);
             $this->handleCancellation($order, $schedule_time, $expiry_time);
             return;
         }
+
 
         $method = $order->get_payment_method();
 
@@ -102,10 +111,11 @@ class PayuVerifyPayments extends WcPayubiz
         $this->clearScheduledTask(serialize($order), $schedule_time, $expiry_time);
     }
 
-    private function handleRefundExpiredOrder($order) 
-    {   
+    private function handleRefundExpiredOrder($order)
+    {
         $method = $order->get_payment_method();
-        if ($method == 'payubiz') {
+        // if ($method == 'payubiz') { #changed
+        if ($method == 'payubiz' && $order->get_status() !== 'completed' && $order->get_status() !== 'processing') {
             // Handle expired order logic here
             $order_id = $order->id;
             $refund_amount = $order->get_total();
@@ -149,8 +159,11 @@ class PayuVerifyPayments extends WcPayubiz
             if ($verify_status) {
                 $order->payment_complete();
                 error_log("order marked completed by scheduler  $order->id");
-                $order_new = serialize($order);
-                $this->clearScheduledTask($order_new, $schedule_time, $expiry_time);
+                if ($order->is_paid()) {
+                    error_log("Already paid. Cancelling future cron for order {$order->get_id()}");
+                    $this->clearScheduledTask(serialize($order), $schedule_time, $expiry_time);
+                    return;
+                }
             }
         }
     }

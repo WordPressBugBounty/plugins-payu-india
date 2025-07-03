@@ -309,14 +309,14 @@ class PayuCartExpressCheckout
         // if ($total_rows['payment_method']['value'] == 'PayUBiz') {
         if (isset($total_rows['payment_method']['value']) && $total_rows['payment_method']['value'] === 'PayUBiz') {
             $payment_mode['payment_mode'] = array(
-                'label' => __('Payment Mode', 'your-text-domain'),
+                'label' => __('Payment Mode', 'payubiz'),
                 'value' => $order->get_meta('payu_mode'),
             );
 
             $payu_offer_type = $order->get_meta('payu_offer_type');
             if ($payu_offer_type) {
                 $payment_mode['payment_offer_type'] = array(
-                    'label' => __('Offer Type', 'your-text-domain'),
+                    'label' => __('Offer Type', 'payubiz'),
                     'value' => $payu_offer_type,
                 );
             }

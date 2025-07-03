@@ -4,7 +4,7 @@ Donate Link:
 Tags: payment, gateway, payu
 Requires at least: 5.3
 Tested up to: 6.8
-Stable tag: 3.8.5
+Stable tag: 3.8.8
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -44,6 +44,25 @@ screenshot-8: Payment error posted back by PayU payment gateway.
 screenshot-9: After successful payment, control redirected to WooCommerce order success page.
 
 == Changelog ==
+
+= 3.8.8 = 
+
+Remove user token api
+
+Added hash validation for shipping cost api
+
+= 3.8.7 =
+
+Fixing user session
+
+Skipping order update for shipping api
+
+= 3.8.6 =
+
+Fixed:
+
+User session issue
+
 = 3.8.5 =
 
 Added:
