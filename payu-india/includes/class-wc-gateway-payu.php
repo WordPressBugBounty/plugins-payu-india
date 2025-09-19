@@ -367,7 +367,33 @@ class WcPayubiz extends WC_Payment_Gateway
 		// $country = sanitize_text_field($order->billing_country);
 		$country = $order->billing_country ? sanitize_email($order->billing_country) : '';
 		$pG = '';
-		$udf5 = 'WooCommerce';
+		// Include a all plugins file through includes
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		if (! function_exists('is_plugin_active')) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		// Set default values
+		$plugin_version = '3.8.8';
+		$folder_name    = 'payu-india';
+		$max_version    = '0.0.0';
+
+		// Loop through all installed plugins
+		foreach (get_plugins() as $file => $data) {
+			if (stripos($data['Name'], 'PayU') !== false) {
+
+				// If plugin is active OR has higher version than current max
+				if (is_plugin_active($file) || version_compare($data['Version'], $max_version, '>')) {
+					$plugin_version = $data['Version'];
+					$folder_name    = dirname($file);
+					$max_version    = $data['Version'];
+				}
+			}
+		}
+
+		// Build UDF5 string
+		$udf5 = 'WooCommerce_version_' . $plugin_version;
+		// $udf5 = 'WooCommerce';
 		$hash = $this->generateHashToken($txnid, $amount, $productInfo, $firstname, $email, $udf4, $udf5);
 
 		$payu_payment_nonce = wp_nonce_field('payu_payment_nonce', 'payu_payment_nonce', true, false);
