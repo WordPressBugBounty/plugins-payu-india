@@ -3,13 +3,13 @@
 Plugin Name: PayU India
 Plugin URI: https://payu.in/
 Description: Seamlessly integrate PayU with WooCommerce for secure and reliable payment processing.
-Version: 3.8.8
+Version: 3.8.9
 Author: Team PayU
 Author URI: https://payu.in/
 Tags: payment, gateway, payu
 Requires at least: 5.3
 Tested up to: 6.8
-Stable tag: 3.8.8
+Stable tag: 3.8.9
 Requires PHP: 7.4
 License: GPLv2 or later
 Woo: 7310302:82f4a3fafb07f086f3ebac34a6a03729
@@ -72,12 +72,22 @@ function woocommercePayubizInit()
 		add_action('the_content', 'showpayubizMessage');
 	}
 
+	// function showpayubizMessage($content)
+	// {
+	// 	return '<div class="box ' . esc_html__(sanitize_text_field($_GET['msg']), 'payubiz') . '-box">' .
+	// 		esc_html__(sanitize_text_field($_GET['msg']), 'payubiz') .
+	// 		'</div>' . $content;
+	// }
 	function showpayubizMessage($content)
 	{
-		return '<div class="box ' . sanitize_text_field($_GET['type']) . '-box">' .
-			esc_html__(sanitize_text_field($_GET['msg']), 'payubiz') .
+		$type = isset($_GET['type']) ? esc_attr($_GET['type']) : 'info';
+		$msg  = isset($_GET['msg']) ? esc_html($_GET['msg']) : '';
+
+		return '<div class="box ' . $type . '-box">' .
+			$msg .
 			'</div>' . $content;
 	}
+
 	static $plugin;
 
 	if (!isset($plugin)) {
