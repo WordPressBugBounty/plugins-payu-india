@@ -28,12 +28,9 @@ final class WC_Payu_Blocks extends AbstractPaymentMethodType
             true
         );
 
-        // if (function_exists('wp_set_script_translations')) 
-        // {
-        //     wp_set_script_translations('payu-blocks-integration');
-        // }
+        
         if (function_exists('wp_set_script_translations')) {
-            wp_set_script_translations('payu-blocks-integration', 'payu', plugin_dir_path(__FILE__) . 'languages');
+            wp_set_script_translations('payu-blocks-integration', 'payu-india', plugin_dir_path(__FILE__) . 'languages');
         }
 
         return ['payu-blocks-integration'];
@@ -42,8 +39,8 @@ final class WC_Payu_Blocks extends AbstractPaymentMethodType
     public function get_payment_method_data()
     {
         return [
-            'title' => $this->settings['title'] ?? __('Pay by PayUBiz', 'payu'),
-            'description' => $this->settings['description'] ?? __('Pay securely using PayUBiz.', 'payu'),
+            'title' => $this->settings['title'] ?? esc_html__('Pay by PayUBiz', 'payu-india'),
+            'description' => $this->settings['description'] ?? esc_html__('Pay securely using PayUBiz.', 'payu-india'),
             'image'       => plugins_url('images/payubizlogo.png', dirname(__FILE__)),
         ]; 
     }

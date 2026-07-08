@@ -3,13 +3,14 @@
 Plugin Name: PayU India
 Plugin URI: https://payu.in/
 Description: Seamlessly integrate PayU with WooCommerce for secure and reliable payment processing.
-Version: 3.8.9
+Version: 3.9.0
 Author: Team PayU
 Author URI: https://payu.in/
+Text Domain: payu-india
 Tags: payment, gateway, payu
 Requires at least: 5.3
-Tested up to: 6.8
-Stable tag: 3.8.9
+Tested up to: 7.0
+Stable tag: 3.9.0
 Requires PHP: 7.4
 License: GPLv2 or later
 Woo: 7310302:82f4a3fafb07f086f3ebac34a6a03729
@@ -25,13 +26,13 @@ if (!defined('ABSPATH')) {
  * This action is documented in includes/class-payu-activator.php
  */
 
-function activatePayu()
+function payu_activate()
 {
 	require_once plugin_dir_path(__FILE__) . 'includes/class-payu-activator.php';
 	PayuActivator::activate();
 }
 
-register_activation_hook(__FILE__, 'activatePayu');
+register_activation_hook(__FILE__, 'payu_activate');
 
 require_once plugin_dir_path(__FILE__) . 'includes/constant.php';
 
@@ -55,9 +56,9 @@ require_once plugin_dir_path(__FILE__) . 'includes/buy_now/buy-now-payu.php';
 */
 require_once plugin_dir_path(__FILE__) . 'includes/payu_affordability_widget/payu-affordability-widget.php';
 
-add_action('plugins_loaded', 'woocommercePayubizInit', 0);
+add_action('plugins_loaded', 'payu_woocommerce_init', 0);
 
-function woocommercePayubizInit()
+function payu_woocommerce_init()
 {
 
 	if (!class_exists('WC_Payment_Gateway')) {
@@ -67,24 +68,20 @@ function woocommercePayubizInit()
 	/**
 	 * Localisation
 	 */
-
-	if (isset($_GET['msg']) && sanitize_text_field($_GET['msg']) != '') {
-		add_action('the_content', 'showpayubizMessage');
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL parameter only to display a notice.
+	if (isset($_GET['msg']) && sanitize_text_field(wp_unslash($_GET['msg'])) != '') {
+		add_action('the_content', 'payu_showpayubiz_message');
 	}
 
-	// function showpayubizMessage($content)
-	// {
-	// 	return '<div class="box ' . esc_html__(sanitize_text_field($_GET['msg']), 'payubiz') . '-box">' .
-	// 		esc_html__(sanitize_text_field($_GET['msg']), 'payubiz') .
-	// 		'</div>' . $content;
-	// }
-	function showpayubizMessage($content)
+	function payu_showpayubiz_message($content)
 	{
-		$type = isset($_GET['type']) ? esc_attr($_GET['type']) : 'info';
-		$msg  = isset($_GET['msg']) ? esc_html($_GET['msg']) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL parameter only to display a notice.
+		$type = isset($_GET['type']) ? sanitize_key(wp_unslash($_GET['type'])) : 'info';
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL parameter only to display a notice.
+		$msg  = isset($_GET['msg']) ? sanitize_text_field(wp_unslash($_GET['msg'])) : '';
 
-		return '<div class="box ' . $type . '-box">' .
-			$msg .
+		return '<div class="box ' . esc_attr($type) . '-box">' .
+			esc_html($msg) .
 			'</div>' . $content;
 	}
 
@@ -160,23 +157,18 @@ function woocommercePayubizInit()
 ------------------- Payu Support Block Based Cart ------------------------------- 
          ------ Only working in a Commerce pro mode ----------------------
 ========================================================================================= */
-function is_commercepro_enabled() {
+function payu_is_commercepro_enabled() {
     $payu_settings = get_option('woocommerce_payubiz_settings');
     $selected_mode = isset($payu_settings['checkout_express']) ? $payu_settings['checkout_express'] : 'redirect';
- 
-    // echo "</pre>";
-    // print_r($payu_settings);
-    // echo "</pre>";
-     //echo $selected_mode;
-    // exit;
-    return ($selected_mode == 'checkout_express');
+
+    return ('checkout_express' === $selected_mode);
 }
 /* ==================================================================================
          -------------- Enqueu Js Script ----------------------
 ================================================================================== */
 
-function enqueue_custom_block_cart_script() {
-    if (is_commercepro_enabled()) {
+function payu_enqueue_custom_block_cart_script() {
+    if (payu_is_commercepro_enabled()) {
         wp_enqueue_script(
             'custom-block-cart-script',
             plugin_dir_url(__FILE__) . 'assets/js/custom-block-cart.js',
@@ -186,7 +178,7 @@ function enqueue_custom_block_cart_script() {
         );
     }
 }
-add_action('wp_enqueue_scripts', 'enqueue_custom_block_cart_script');
+add_action('wp_enqueue_scripts', 'payu_enqueue_custom_block_cart_script');
 
 
 /*=========================================================================================
@@ -232,21 +224,19 @@ function payu_woocommerce_block_support()
 ------------------- Plugin Activation Show Menu in plugin page ---------------------------
 ========================================================================================= */
 
-add_filter('plugin_action_links', 'custom_plugin_action_links_all', 10, 2);
+add_filter('plugin_action_links', 'payu_plugin_action_links', 10, 2);
 
-function custom_plugin_action_links_all($links, $file) {
+function payu_plugin_action_links($links, $file) {
     if ($file === plugin_basename(__FILE__)) {
 
-        $textdomain = basename(dirname(__FILE__));
-
         $settings_url = admin_url('admin.php?page=wc-settings&tab=checkout&section=payubiz');
-        $settings_link = '<a href="' . esc_url($settings_url) . '">' . esc_html__('Settings', $textdomain) . '</a>';
+        $settings_link = '<a href="' . esc_url($settings_url) . '">' . esc_html__('Settings', 'payu-india') . '</a>';
 
         $support_url = 'https://help.payu.in/search-query'; 
-        $support_link = '<a href="' . esc_url($support_url) . '" target="_blank" rel="noopener noreferrer">' . esc_html__('Support', $textdomain) . '</a>';
+        $support_link = '<a href="' . esc_url($support_url) . '" target="_blank" rel="noopener noreferrer">' . esc_html__('Support', 'payu-india') . '</a>';
 
         $documentation_url = 'https://docs.payu.in/docs/woocommerce'; 
-        $documentation_link = '<a href="' . esc_url($documentation_url) . '" target="_blank" rel="noopener noreferrer">' . esc_html__('Docs', $textdomain) . '</a>';
+        $documentation_link = '<a href="' . esc_url($documentation_url) . '" target="_blank" rel="noopener noreferrer">' . esc_html__('Docs', 'payu-india') . '</a>';
 
         array_unshift($links, $settings_link, $support_link, $documentation_link);
     }

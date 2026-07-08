@@ -3,8 +3,8 @@ Contributors:
 Donate Link:
 Tags: payment, gateway, payu
 Requires at least: 5.3
-Tested up to: 6.8
-Stable tag: 3.8.9
+Tested up to: 7.0
+Stable tag: 3.9.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -45,6 +45,10 @@ screenshot-9: After successful payment, control redirected to WooCommerce order 
 
 == Changelog ==
 
+= 3.9.0 =
+Security: Fixed reported order price change vulnerability.
+Refund Status Issue From PayU Dashboard fixed
+
 = 3.8.9 =
 Security: Fixed reflected XSS vulnerability.
 
@@ -54,17 +58,13 @@ Remove user token api
 
 Added hash validation for shipping cost api
 
-= 3.8.7 =
-
 Fixing user session
 
 Skipping order update for shipping api
 
-= 3.8.6 =
-
-Fixed:
-
 User session issue
+
+Note: Versions 3.8.6 and 3.8.7 were internal maintenance releases and were not publicly tagged on WordPress SVN.
 
 = 3.8.5 =
 
@@ -77,6 +77,8 @@ Block-based checkout support
 BuyNow feature
 
 Affordability Widget feature
+
+Automatic Refund Issue Fixed
 
 = 3.8.4 =
 

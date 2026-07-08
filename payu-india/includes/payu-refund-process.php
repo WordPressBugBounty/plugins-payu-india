@@ -1,5 +1,7 @@
 <?php
-
+if (! defined('ABSPATH')) {
+    exit;
+}
 class PayuRefundProcess extends PayuPaymentGatewayAPI
 {
     protected $enable_refund;
@@ -18,7 +20,7 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
 
             $plugin_data = get_option('woocommerce_payubiz_settings');
 
-            if(is_array($plugin_data)){
+            if (is_array($plugin_data)) {
                 $this->enable_refund = $plugin_data['enable_refund'];
                 $this->payu_enable = $plugin_data['enabled'];
                 $this->payu_salt = $plugin_data['currency1_payu_salt'];
@@ -31,7 +33,11 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
                 $this->gateway_module = '';
                 $this->payu_key = '';
             }
-           
+
+            //Changed by SM
+            // Hook into the refund check status update (api for webhook)
+            add_action('rest_api_init', array(&$this, 'refund_status_callback'));
+
             if ($this->enable_refund == 'yes' && $this->payu_enable == 'yes') {
                 // Hook into the order details page to display the refund form
                 add_action('woocommerce_order_details_after_order_table', array(&$this, 'custom_refund_form'));
@@ -54,8 +60,9 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
                 // Hook into the refund time message
                 add_action('woocommerce_order_details_before_order_table', array(&$this, 'payu_refund_time_message'));
 
-                // Hook into the refund check status update (api for webhook)
-                add_action('rest_api_init', array(&$this, 'refund_status_callback'));
+                //Changed by SM
+                // // Hook into the refund check status update (api for webhook)
+                // add_action('rest_api_init', array(&$this, 'refund_status_callback'));
 
                 add_action('init', array(&$this, 'register_refund_in_progress_order_status'));
                 add_filter('wc_order_statuses', array(&$this, 'add_refund_in_progress_to_order_statuses'), 1);
@@ -87,7 +94,7 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
         if (!sizeof($order->get_refunds()) && ($order_status == 'processing' || $order_status == 'completed')) {
             $full_refund_form = '<form method="post" id="payu_refund_form">';
             $full_refund_form .= '<input type="hidden" name="custom_refund_order_id"
-            value="' . esc_attr($order->id) . '">';
+            value="' . esc_attr($order->get_id()) . '">'; //Changed by SM
             $full_refund_form .=  wp_nonce_field(
                 'payu_full_refund_payment_nonce',
                 'payu_full_refund_payment_nonce',
@@ -97,11 +104,13 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
             $full_refund_form .= '<input type="submit" name="custom_refund_submit" class="payu-refund"
             value="Full Refund Request">';
             $full_refund_form .= ' </form>';
-            echo esc_html(apply_filters('payu_full_refund_form', $full_refund_form, $order));
+            echo wp_kses_post(apply_filters('payu_full_refund_form', $full_refund_form, $order));
         }
         if ($order_status == 'refund-progress') {
             echo '<form method="post" id="payu_refund_status">';
             echo '<input type="hidden" name="custom_refund_order_id" value="' . esc_attr($order_id) . '">';
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_nonce_field() outputs safe HTML.
+            echo wp_nonce_field('payu_check_refund_status_nonce', 'payu_check_refund_status_nonce', true, false);
             echo '<input type="submit" name="custom_check_refund_submit"
             class="payu-refund"
             value="Check refund Status">';
@@ -139,12 +148,15 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
 
         if (isset($_POST['custom_refund_submit'])) {
             // Process refund using payment gateway API
-            $order_id = $order->id;
+            $order_id = $order->get_id(); //Changed by SM
             $refund_amount = $order->get_total();
             $refund_reason = 'Customer request';
             if (
                 isset($_POST['payu_full_refund_payment_nonce']) &&
-                wp_verify_nonce(sanitize_key(wp_unslash($_POST['payu_full_refund_payment_nonce'], 'payu_full_refund_payment_nonce')))
+                wp_verify_nonce(
+                    sanitize_key(wp_unslash($_POST['payu_full_refund_payment_nonce'])),
+                    'payu_full_refund_payment_nonce'
+                )
             ) {
                 $refund_id = wc_create_refund(array(
                     'amount'   => $refund_amount,
@@ -172,6 +184,15 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
     public function check_custom_refund_status($order)
     {
         if (!isset($_POST['custom_check_refund_submit'])) {
+            return;
+        }
+        if (
+            ! isset($_POST['payu_check_refund_status_nonce']) ||
+            ! wp_verify_nonce(
+                sanitize_key(wp_unslash($_POST['payu_check_refund_status_nonce'])),
+                'payu_check_refund_status_nonce'
+            )
+        ) {
             return;
         }
         // Process refund using payment gateway API
@@ -206,11 +227,13 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
             )
         ) {
 
-            $order_id = $order->id;
+            $order_id = $order->get_id(); //Changed by SM
             $refund_reason = 'Customer request';
             $payu_coupon_value = get_payu_coupon_value($order);
             $refunded_item_ids = $this->payu_refund_item_ids($order);
-            $item_id = wp_unslash(sanitize_text_field(empty($_POST['custom_partial_refund_item_id'])));
+            $item_id = isset($_POST['custom_partial_refund_item_id'])
+                ? absint(wp_unslash($_POST['custom_partial_refund_item_id']))
+                : 0;
             if (in_array($item_id, $refunded_item_ids)) {
                 echo '<p><strong>Already applied for this product</strong></p>';
                 return;
@@ -300,6 +323,7 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
 
     public function refund_status_callback()
     {
+        error_log("REST API INIT TRIGGERED");
         register_rest_route('payu/v1', '/refund-status-update', array(
             'methods' => 'POST',
             'callback' => array($this, 'refund_status_update'),
@@ -317,27 +341,72 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
         if ($parameters && isset($parameters->action) && $parameters->action == 'refund') {
             $status = $parameters->status;
             $request_id = $parameters->request_id;
-            if ($parameters->status == 'success' && $this->payu_refund_status_check($request_id, 'success')) {
+            if (
+                $status === 'success' &&
+                $this->payu_refund_status_check($request_id, 'success')
+            ) {
                 $refund_msg = "Your request is $status";
 
-                $query = $wpdb->prepare("SELECT order_id FROM $wp_refund_transactions_table
-                WHERE request_id = %s", $request_id);
-                
-                $order_id = $wpdb->get_var($query);
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+                $order_id = $wpdb->get_var(
+                    $wpdb->prepare(
+                        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Trusted custom table name.
+                        "SELECT order_id
+                        FROM {$wp_refund_transactions_table}
+                        WHERE request_id = %s",
+                        $request_id
+                    )
+                );
+                // Try from merchantTxnId
+                if (!$order_id && isset($parameters->merchantTxnId)) {
+                    $parts = explode('_', $parameters->merchantTxnId);
+                    if (!empty($parts[0])) {
+                        $order_id = $parts[0];
+                    }
+                }
 
+                // Try from mihpayid (transaction ID)
+                if (!$order_id && isset($parameters->mihpayid)) {
+                    $orders = wc_get_orders([
+                        'limit' => 1,
+                        'meta_key' => '_transaction_id',
+                        'meta_value' => $parameters->mihpayid,
+                    ]);
+
+                    if (!empty($orders)) {
+                        $order = $orders[0];
+                        $order_id = $order->get_id();
+                    }
+                }
                 if ($order_id) {
                     $order = wc_get_order($order_id);
-                    $order->update_status('refunded');
-                    $current_date = gmdate("Y-m-d h:i:s");
-                    $query = $wpdb->prepare(
-                        "UPDATE $wp_refund_transactions_table
-                        SET status = 'refunded', updated_at = %s
-                        WHERE request_id = %d",
-                        $current_date,
-                        $request_id
-                    );
-                    
-                    $wpdb->query($query);
+                    //Changed by SM
+                    if (
+                        $order
+                        && $order->get_payment_method() === 'payubiz'
+                        && $order->get_meta('_transaction_id') == $parameters->mihpayid
+                    ) {
+                        //Changed by SM
+                        // Avoid duplicate update
+                        if ($order->get_status() !== 'refunded') {
+                            $order->update_status('refunded');
+                        }
+
+                        $current_date = gmdate("Y-m-d h:i:s");
+                        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+                        $wpdb->query(
+                            $wpdb->prepare(
+                                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Trusted custom table name.
+                                "UPDATE {$wp_refund_transactions_table}
+                            SET status = 'refunded', updated_at = %s
+                            WHERE request_id = %s",
+                                $current_date,
+                                $request_id
+                            )
+                        );
+                    }
+
+                    $refund_msg = "Your request is success";
                 } else {
                     $refund_msg = 'Order not found';
                 }
@@ -361,7 +430,8 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
             'show_in_admin_status_list' => true,
             'show_in_admin_all_list'    => true,
             'exclude_from_search'       => false,
-            'label_count'               => 'Refund In-Progress (%s)', 'Refund In-Progress (%s)'
+            'label_count'               => 'Refund In-Progress (%s)',
+            'Refund In-Progress (%s)'
         ));
     }
 
@@ -375,7 +445,7 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
                 $new_order_statuses['wc-refund-progress'] = _x(
                     'Refund in Progress',
                     'Refund In-Progress',
-                    'textdomain'
+                    'payu-india'
                 );
             }
         }
@@ -469,7 +539,7 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
             class="payu-refund"
             value="Refund Request for this Item">';
             $partial_refund_form .= '</form>';
-            echo esc_html(apply_filters('payu_partial_refund_form', $partial_refund_form, $item_id, $item, $order));
+            echo wp_kses_post(apply_filters('payu_partial_refund_form', $partial_refund_form, $item_id, $item, $order));
         }
     }
 
@@ -496,7 +566,7 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
         $time = 3600; // seconds
         $schedules['payu_check_refund_status_set_crone_time'] = array(
             'interval' => $time,
-            'display'  => __('Payu refund status check Every Hour', 'payu'),
+            'display'  => esc_html__('PayU refund status check every hour', 'payu-india'),
         );
         return $schedules;
     }
@@ -557,9 +627,15 @@ class PayuRefundProcess extends PayuPaymentGatewayAPI
                     if ($transaction_detail['status'] == 'success') {
                         $order = wc_get_order($request->order_id);
                         $order->update_status('refund');
-                        $wpdb->query("UPDATE $wp_refund_transactions_table
-                        SET status = 'refunded'
-                        WHERE id = $request->id");
+                        $wpdb->query(
+                            $wpdb->prepare(
+                                "UPDATE {$wp_refund_transactions_table}
+                                SET status = %s
+                                WHERE id = %d",
+                                'refunded',
+                                (int) $request->id
+                            )
+                        );
                     }
                 }
             }

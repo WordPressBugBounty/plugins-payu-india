@@ -38,13 +38,13 @@ class WcPayubiz extends WC_Payment_Gateway
 		global $wpdb;
 		// Go wild in here
 		$this->id = 'payubiz';
-		$this->method_title = __('PayUBiz', 'payubiz');
+		$this->method_title = __('PayUBiz', 'payu-india');
 		$this->icon = plugins_url('images/payubizlogo.png', dirname(__FILE__));
 		$this->has_fields = false;
 		$this->init_form_fields();
 		$this->init_settings();
-		$this->title = __('Credit/Debit Card & NetBanking Payment', 'payubiz');
-		$this->method_description = __('Enable secure payments through PayU using (Credit/Debit Cards, NetBanking, UPI, and Wallets).', 'payubiz');
+		$this->title = __('Credit/Debit Card & NetBanking Payment', 'payu-india');
+		$this->method_description = __('Enable secure payments through PayU using (Credit/Debit Cards, NetBanking, UPI, and Wallets).', 'payu-india');
 		$this->supports = array('products', 'refunds');
 		$this->description = sanitize_text_field($this->settings['description']);
 		$this->checkout_express = sanitize_text_field($this->settings['checkout_express']);
@@ -69,7 +69,7 @@ class WcPayubiz extends WC_Payment_Gateway
 
 
 		add_action('init', array(&$this, 'check_payubiz_response'));
-		add_action('wp_head', array(&$this, 'payu_scripts'));
+		add_action('wp_enqueue_scripts', array(&$this, 'payu_scripts'));
 		//update for woocommerce >2.0
 		add_action('woocommerce_api_' . strtolower(get_class($this)), array($this, 'check_payubiz_response'));
 
@@ -127,11 +127,11 @@ class WcPayubiz extends WC_Payment_Gateway
 	 **/
 	public function admin_options()
 	{
-		echo '<h3>' . esc_html__('PayU India', 'payubiz') . '</h3>';
-		echo '<p>' . sprintf(__('<a target="_blank" href="https://onboarding.payu.in/app/account/signup?partner_name=WooCommerce&partner_source=Affiliate+Links&partner_uuid=11eb-3a29-70592552-8c2b-0a696b110fde&source=Partner">Sign up</a> for a PayU merchant account to get started or <a target="_blank" href="https://onboarding.payu.in/app/account/login?partner_name=WooCommerce&partner_source=Affiliate+Links&partner_uuid=11eb-3a29-70592552-8c2b-0a696b110fde&source=Partner">login</a> to your existing account.', 'payubiz')) . '</p>';
+		echo '<h3>' . esc_html__('PayU India', 'payu-india') . '</h3>';
+		echo '<p>' . wp_kses_post(__('<a target="_blank" href="https://onboarding.payu.in/app/account/signup?partner_name=WooCommerce&partner_source=Affiliate+Links&partner_uuid=11eb-3a29-70592552-8c2b-0a696b110fde&source=Partner">Sign up</a> for a PayU merchant account to get started or <a target="_blank" href="https://onboarding.payu.in/app/account/login?partner_name=WooCommerce&partner_source=Affiliate+Links&partner_uuid=11eb-3a29-70592552-8c2b-0a696b110fde&source=Partner">login</a> to your existing account.', 'payu-india')) . '</p>';
 		if (PHP_VERSION_ID < 70300) {
 			echo "<h1 style=\"color:red;\">" . esc_html__('**Notice: PayU payment plugin requires PHP v7.3 or higher.<br />
-			Plugin will not work properly below PHP v7.3 due to SameSite cookie restriction.', 'payubiz') . "</h1>";
+			Plugin will not work properly below PHP v7.3 due to SameSite cookie restriction.', 'payu-india') . "</h1>";
 		}
 		echo '<table class="form-table">';
 		$this->generate_settings_html();
@@ -144,7 +144,7 @@ class WcPayubiz extends WC_Payment_Gateway
 	function payment_fields()
 	{
 		if ($this->description) {
-			echo wpautop(wptexturize($this->description));
+			echo wp_kses_post(wptexturize($this->description));
 		}
 	}
 
@@ -153,9 +153,12 @@ class WcPayubiz extends WC_Payment_Gateway
 	 **/
 	public function receipt_page($order)
 	{
-		$this->manage_session(); //Update cookies with samesite
-		$thankyou_msg = 'Thank you for your order, please wait as you will be automatically redirected to PayUBiz.';
-		echo '<p>' . esc_html__($thankyou_msg, 'payubiz') . '</p>';
+		$this->manage_session(); // Update cookies with SameSite.
+		echo '<p>' . esc_html__(
+			'Thank you for your order, please wait as you will be automatically redirected to PayUBiz.',
+			'payu-india'
+		) . '</p>';
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- generatePayubizForm() returns intentionally generated HTML form.
 		echo $this->generatePayubizForm($order);
 	}
 
@@ -287,7 +290,7 @@ class WcPayubiz extends WC_Payment_Gateway
 		//For wooCoomerce 2.0
 		$redirect_url = add_query_arg('wc-api', get_class($this), $redirect_url);
 		WC()->session->set('orderid_awaiting_payubiz', $order_id);
-		$txnid = $order_id . '_' . date("ymd") . '_' . random_int(1, 100);
+		$txnid = $order_id . '_' . gmdate("ymd") . '_' . random_int(1, 100);
 		update_post_meta($order_id, 'order_txnid', $txnid);
 
 
@@ -317,18 +320,18 @@ class WcPayubiz extends WC_Payment_Gateway
 		$plugin_data = get_option('woocommerce_payubiz_settings');
 		$payu_dynamic_charges_flag = $plugin_data['dynamic_charges_flag'];
 		$order_subtotal = sanitize_text_field($order->get_subtotal());
-		$order_total_tax = sanitize_text_field($order->order_total);
+		$order_total_tax = sanitize_text_field($order->get_total());
 		if ($payu_dynamic_charges_flag == "no") {
-			$amount = $this->checkout_express == 'checkout_express' ? $order_total_tax : sanitize_text_field($order->order_total);
+			$amount = $this->checkout_express == 'checkout_express' ? $order_total_tax : sanitize_text_field($order->get_total());
 		} else {
-			$amount = $this->checkout_express == 'checkout_express' ? $order_subtotal : sanitize_text_field($order->order_total);
+			$amount = $this->checkout_express == 'checkout_express' ? $order_subtotal : sanitize_text_field($order->get_total());
 		}
 		$amount = number_format($amount, 2);
 		$amount = str_replace(",", "", $amount);
 		//echo $amount; exit;
-		$firstname = sanitize_text_field($order->billing_first_name);
-		$lastname = sanitize_text_field($order->billing_last_name);
-		$zipcode = sanitize_text_field($order->billing_postcode);
+		$firstname = sanitize_text_field($order->get_billing_first_name());
+		$lastname = sanitize_text_field($order->get_billing_last_name());
+		$zipcode = sanitize_text_field($order->get_billing_postcode());
 		$edit_email_allowed = true;
 		if (is_user_logged_in()) {
 			$edit_email_allowed = false;
@@ -349,23 +352,23 @@ class WcPayubiz extends WC_Payment_Gateway
 		if ($guest_checkout_enabled == 'yes') {
 			$email_required = false;
 		}
-		$billing_email = $order->billing_email ? sanitize_email($order->billing_email) : '';
+		$billing_email = $order->get_billing_email() ? sanitize_email($order->get_billing_email()) : '';
 		//$email = $user_email ? $user_email : $billing_email;
 		$email = isset($user_email) ? $user_email : $billing_email;
-		$phone = isset($payu_phone) ? $payu_phone : sanitize_text_field($order->billing_phone);
-		//$phone = $payu_phone ? $payu_phone : sanitize_text_field($order->billing_phone);
+		$phone = isset($payu_phone) ? $payu_phone : sanitize_text_field($order->get_billing_phone());
+		//$phone = $payu_phone ? $payu_phone : sanitize_text_field($order->get_billing_phone());
 		if (strlen($phone) > 10) {
 			$phone = substr($phone, -10);
 		}
 		// $get_state_list = get_state_list();
-		// $state = $get_state_list[sanitize_text_field($order->billing_state)];
+		// $state = $get_state_list[sanitize_text_field(get_billing_state())];
 		$get_state_list = get_state_list();
-		$billing_state_key = sanitize_text_field($order->billing_state);
+		$billing_state_key = sanitize_text_field($order->get_billing_state());
 		$state = isset($get_state_list[$billing_state_key]) ? $get_state_list[$billing_state_key] : '';
-		$city = $order->billing_city ? sanitize_email($order->billing_city) : '';
-		// $city = sanitize_text_field($order->billing_city);
-		// $country = sanitize_text_field($order->billing_country);
-		$country = $order->billing_country ? sanitize_email($order->billing_country) : '';
+		$city = $order->get_billing_city() ? sanitize_email($order->get_billing_city()) : '';
+		// $city = sanitize_text_field($order->get_billing_city());
+		// $country = sanitize_text_field($order->get_billing_country());
+		$country = $order->get_billing_country() ? sanitize_email($order->get_billing_country()) : '';
 		$pG = '';
 		// Include a all plugins file through includes
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -374,7 +377,7 @@ class WcPayubiz extends WC_Payment_Gateway
 		}
 
 		// Set default values
-		$plugin_version = '3.8.8';
+		$plugin_version = '3.9.0';
 		$folder_name    = 'payu-india';
 		$max_version    = '0.0.0';
 
@@ -395,7 +398,7 @@ class WcPayubiz extends WC_Payment_Gateway
 		$udf5 = 'WooCommerce_version_' . $plugin_version;
 		// $udf5 = 'WooCommerce';
 		$hash = $this->generateHashToken($txnid, $amount, $productInfo, $firstname, $email, $udf4, $udf5);
-
+		error_log("payu hashString2".  $hash);
 		$payu_payment_nonce = wp_nonce_field('payu_payment_nonce', 'payu_payment_nonce', true, false);
 
 		$requestArr = [
@@ -447,13 +450,11 @@ class WcPayubiz extends WC_Payment_Gateway
 			if ($payu_dynamic_charges_flag == "no") {
 				if (wc_prices_include_tax()) {
 					$taxinfo = NULL;
-					$order_amount = $order->order_total;
-
+					$order_amount = $order->get_total();
 				} else {
 					$taxinfo = $taxinfo;
 					$order_amount = $order->get_subtotal();
 				}
-
 			} else {
 				$taxinfo = NULL;
 				$order_amount = $order->get_subtotal();
@@ -465,8 +466,8 @@ class WcPayubiz extends WC_Payment_Gateway
 			// exit;
 
 			if ($payu_dynamic_charges_flag == "yes" && wc_prices_include_tax()) {
-				$order_amount = $order->order_total;
-				$amount = $order->order_total;
+				$order_amount = $order->get_total();
+				$amount = $order->get_total();
 			}
 			$amount = str_replace(",", "", $amount);
 
@@ -503,13 +504,13 @@ class WcPayubiz extends WC_Payment_Gateway
 				'furl' => $site_link,
 				'orderid' => $ramdom_str,
 				'extra_charges' => array(
-						'totalAmount' => NULL, // this amount adding extra charges + cart Amount
-						'shipping_charges' => NULL, // static shipping charges
-						'cod_fee' => 0, // cash on delivery fee.
-						'other_charges' => NULL,
-						'tax_info' => $taxinfo,
+					'totalAmount' => NULL, // this amount adding extra charges + cart Amount
+					'shipping_charges' => NULL, // static shipping charges
+					'cod_fee' => 0, // cash on delivery fee.
+					'other_charges' => NULL,
+					'tax_info' => $taxinfo,
 
-					),
+				),
 				'cart_details' => array(
 					'amount' => $order_amount,
 					'items' => (string) $item_count,
@@ -623,31 +624,37 @@ class WcPayubiz extends WC_Payment_Gateway
 			</form>
 			";
 		$data = json_encode($requestArr, JSON_UNESCAPED_SLASHES);
-		$javascriptCode = <<<EOD
-			<script type='text/javascript'>
-				function boltSubmit() {
-					var data = $data;
-					var handlers = {
-						responseHandler: function(BOLT) {
-							if (BOLT.response.txnStatus == "FAILED") {
-								console.log('Payment failed. Please try again.');
-							}
-							if (BOLT.response.txnStatus == "CANCEL") {
-								console.log('Payment failed. Please try again.');
-							}
-							var payu_frm = document.getElementById('payu_bolt_form');
-							payu_frm.elements.namedItem('payu_resp').value = JSON.stringify(BOLT.response);
-							payu_frm.submit();
-						},
-						catchException: function(BOLT) {
-							console.log('Payment failed. Please try again.');
-						}
-					};
-					bolt.launch(data, handlers);
-				}
-				boltSubmit();
-			</script>
-			EOD;
+		$javascriptCode  = "<script type='text/javascript'>";
+		$javascriptCode .= "function boltSubmit() {";
+		$javascriptCode .= "var data = " . $data . ";";
+		$javascriptCode .= "var handlers = {";
+
+		$javascriptCode .= "responseHandler: function(BOLT) {";
+
+		$javascriptCode .= "if (BOLT.response.txnStatus == 'FAILED') {";
+		$javascriptCode .= "console.log('Payment failed. Please try again.');";
+		$javascriptCode .= "}";
+
+		$javascriptCode .= "if (BOLT.response.txnStatus == 'CANCEL') {";
+		$javascriptCode .= "console.log('Payment failed. Please try again.');";
+		$javascriptCode .= "}";
+
+		$javascriptCode .= "var payu_frm = document.getElementById('payu_bolt_form');";
+		$javascriptCode .= "payu_frm.elements.namedItem('payu_resp').value = JSON.stringify(BOLT.response);";
+		$javascriptCode .= "payu_frm.submit();";
+
+		$javascriptCode .= "},";
+
+		$javascriptCode .= "catchException: function(BOLT) {";
+		$javascriptCode .= "console.log('Payment failed. Please try again.');";
+		$javascriptCode .= "}";
+
+		$javascriptCode .= "};";
+		$javascriptCode .= "bolt.launch(data, handlers);";
+		$javascriptCode .= "}";
+		$javascriptCode .= "boltSubmit();";
+		$javascriptCode .= "</script>";
+
 		return $html . $javascriptCode;
 	}
 
@@ -679,12 +686,7 @@ class WcPayubiz extends WC_Payment_Gateway
 		$cart_url = wc_get_cart_url();
 		$redirect_url = $args_express_checkout['redirect_url'];
 		$payu_payment_nonce = $args_express_checkout['payu_payment_nonce'];
-		// $args_express_checkout['data_array_json']['app_version'] = '3.8.7';
 		$data_array_json = json_encode($args_express_checkout['data_array_json']);
-		// $data_array = $args_express_checkout['data_array_json'];
-		// // $data_array['app_version'] = '3.8.7';
-		// $data_array['app_version'] = COMMERCEPRO_APP_VERSION;
-		// $data_array_json = json_encode($data_array);
 		$c_date = $args_express_checkout['c_date'];
 		$auth_header_string = $args_express_checkout['auth_header_string'];
 
@@ -738,28 +740,26 @@ class WcPayubiz extends WC_Payment_Gateway
 	public function payu_scripts()
 	{
 
-		if ('sandbox' == $this->gateway_module) {
-			echo '<script src="' . esc_js(MERCHANT_HOSTED_PAYMENT_JS_LINK_UAT) . '"></script>';
-		} else {
-			echo '<script src="' . esc_js(MERCHANT_HOSTED_PAYMENT_JS_LINK_PRODUCTION) . '"></script>';
-		}
+		$script = ('sandbox' === $this->gateway_module) ? MERCHANT_HOSTED_PAYMENT_JS_LINK_UAT : MERCHANT_HOSTED_PAYMENT_JS_LINK_PRODUCTION;
+		wp_register_script('payu-bolt',$script,array(),null,false);   // Head me load hogi
+		wp_enqueue_script('payu-bolt');
+		
 	}
 
 	private function generateHashToken($txnid, $amount, $productInfo, $firstname, $email, $udf4, $udf5)
 	{
 		$payu_salt = $this->currency1_payu_salt;
-		return hash(
-			'sha512',
-			$this->currency1_payu_key . '|' .
-			$txnid . '|' .
-			$amount . '|' .
-			$productInfo . '|' .
-			$firstname . '|' .
-			$email . '||||' .
-			$udf4 . '|' .
-			$udf5 . '||||||' .
-			$payu_salt
-		);
+
+		$hash_input = $this->currency1_payu_key . '|' .
+        $txnid . '|' .
+        $amount . '|' .
+        $productInfo . '|' .
+        $firstname . '|' .
+        $email . '||||' .
+        $udf4 . '|' .
+        $udf5 . '||||||';
+	
+		return hash('sha512', $hash_input . $payu_salt);
 	}
 
 	public function process_refund($order_id, $amount = null, $reason = '')

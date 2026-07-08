@@ -1,5 +1,7 @@
 <?php
-
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 class PayuWebhookCalls
 {
 
@@ -42,6 +44,7 @@ class PayuWebhookCalls
 		error_log("Success payment webhook ran");
 		parse_str($parameters, $response_data);
 		$this->payuOrderStatusUpdate($response_data);
+		return new WP_REST_Response(array('status' => 'received'), 200);
 	}
 
 	public function getPaymentFailedUpdate()
@@ -59,6 +62,7 @@ class PayuWebhookCalls
 		error_log("Failed payment webhook ran");
 		parse_str($parameters, $response_data);
 		$this->payuOrderStatusUpdate($response_data);
+		return new WP_REST_Response(array('status' => 'received'), 200);
 	}
 
 	private function payuOrderStatusUpdate($response)
@@ -78,23 +82,23 @@ class PayuWebhookCalls
 					$decoded_data[$key] = $value;
 				}
 			}
-			$payuPaymentValidation = new PayuPaymentValidation();
-			sleep(5);
-			$order = $payuPaymentValidation->payuPaymentValidationAndRedirect($decoded_data);
-			if ($order) {
-				$payu_transactions_tblname = "payu_transactions";
-				$payu_id = $decoded_data['mihpayid'];
-				$wp_track_payu_transactions_tblname = $table_prefix . "$payu_transactions_tblname";
-				$wpdb->update(
-					$wp_track_payu_transactions_tblname,
-					array(
-						'transaction_id' => $payu_id
-					),
-					array(
-						'order_id' => $order->id
-					)
-				);
-			}
+		$payuPaymentValidation = new PayuPaymentValidation();
+		sleep(5);
+		$order = $payuPaymentValidation->paymentValidationAndUpdation($decoded_data);
+		if ($order && $order->get_id()) {
+			$payu_transactions_tblname = "payu_transactions";
+			$payu_id = sanitize_text_field($decoded_data['mihpayid'] ?? '');
+			$wp_track_payu_transactions_tblname = $table_prefix . "$payu_transactions_tblname";
+			$wpdb->update(
+				$wp_track_payu_transactions_tblname,
+				array(
+					'transaction_id' => $payu_id
+				),
+				array(
+					'order_id' => $order->get_id()
+				)
+			);
+		}
 		}
 	}
 }

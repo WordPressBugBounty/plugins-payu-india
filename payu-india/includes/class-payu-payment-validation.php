@@ -16,7 +16,7 @@ class PayuPaymentValidation
 		$this->currency1PayuSalt = sanitize_text_field($plugin_data['currency1_payu_salt']);
 		$this->currency1PayuKey = sanitize_text_field($plugin_data['currency1_payu_key']);
 		$this->redirect_page_id = sanitize_text_field($plugin_data['redirect_page_id']);
-		$this->gatewayModule = $plugin_data['gateway_module'];
+		$this->gatewayModule = sanitize_text_field($plugin_data['gateway_module']);
 		if (sanitize_text_field($plugin_data['verify_payment']) != "yes") {
 			$this->bypassVerifyPayment = true;
 		}
@@ -30,54 +30,72 @@ class PayuPaymentValidation
 		$this->redirectTo($redirect_url);
 	}
 
+
 	public function paymentValidationAndUpdation($postdata, $bypass_verify_payment = false)
 	{
-
-		if (isset($postdata['key'])) {
-			$this->bypassVerifyPayment = $bypass_verify_payment;
-			global $woocommerce, $wpdb;
-			$payu_key = $this->currency1PayuKey;
-			$payu_salt = $this->currency1PayuSalt;
-
-			$txnid = $postdata['txnid'];
-			$order_id = explode('_', $txnid);
-			$order_id = (int)$order_id[0];    //get rid of time part
-			payu_transaction_data_insert($postdata, $order_id);
-			$order = new WC_Order($order_id);
-			$order->update_meta_data('payu_bankcode', $postdata['bankcode']);
-			$order->update_meta_data('payu_mode', $postdata['mode']);
-			$transaction_offer = $postdata['transaction_offer'];
-			if (isset($postdata['extra_charges']['carrier_code'])) {
-				$this->update_shipping_method($order, $postdata['extra_charges']['carrier_code']);
-			}
-			$this->reconcileOfferData($transaction_offer, $order);
-			return $this->payuValidatePostData($postdata, $order, $payu_key, $payu_salt);
-		} else {
+		// Validate required fields
+		if (
+			empty($postdata['key']) ||
+			empty($postdata['txnid']) ||
+			empty($postdata['status']) ||
+			empty($postdata['hash']) ||
+			empty($postdata['amount']) ||
+			empty($postdata['productinfo']) ||
+			empty($postdata['firstname']) ||
+			empty($postdata['email'])
+		) {
 			return false;
 		}
+
+		$this->bypassVerifyPayment = $bypass_verify_payment;
+
+		global $woocommerce, $wpdb;
+
+		$payu_key  = $this->currency1PayuKey;
+		$payu_salt = $this->currency1PayuSalt;
+
+		$txnid = sanitize_text_field($postdata['txnid']);
+		$order_id = explode('_', $txnid);
+		$order_id = (int) $order_id[0]; // Get rid of timestamp part
+
+		payu_transaction_data_insert($postdata, $order_id);
+
+		$order = wc_get_order($order_id);
+
+		if (!$order) {
+			return false;
+		}
+
+		return $this->payuValidatePostData(
+			$postdata,
+			$order,
+			$payu_key,
+			$payu_salt
+		);
 	}
 
 	private function manageMessages()
 	{
-		// Check if the function wc_add_notice is available
-		if (function_exists('wc_add_notice')) {
-			// Make sure WooCommerce is fully loaded before clearing notices
-			if (function_exists('wc_clear_notices')) {
-				wc_clear_notices(); // Clear existing notices
-			}
-			// Only add the notice if the class is not 'success'
-			if ($this->msg['class'] != 'success') {
+		// Only use WooCommerce notices when session is available.
+		if (function_exists('wc_add_notice') && function_exists('WC') && WC()->session) {
+
+			wc_clear_notices();
+
+			if ($this->msg['class'] !== 'success') {
 				wc_add_notice($this->msg['message'], $this->msg['class']);
 			}
 		} else {
-			// Fallback to global $woocommerce if wc_add_notice is not available
+
 			global $woocommerce;
-			// Check if the WooCommerce object exists and the add_error method is available
-			if ($this->msg['class'] != 'success') {
+
+			if ($this->msg['class'] !== 'success') {
+
 				if (is_object($woocommerce) && method_exists($woocommerce, 'add_error')) {
 					$woocommerce->add_error($this->msg['message']);
-					// Ensure messages are properly set
-					$woocommerce->set_messages();
+
+					if (method_exists($woocommerce, 'set_messages')) {
+						$woocommerce->set_messages();
+					}
 				}
 			}
 		}
@@ -96,7 +114,7 @@ class PayuPaymentValidation
 
 	private function redirectTo($redirect_url)
 	{
-		wp_redirect($redirect_url);
+		wp_safe_redirect($redirect_url);
 		exit;
 	}
 
@@ -104,30 +122,33 @@ class PayuPaymentValidation
 	{
 
 		$udf4 = $order->get_meta('udf4');
-		$txnid = $postdata['txnid'];
+		$txnid = sanitize_text_field($postdata['txnid']);
 
-		if ($postdata['key'] == $payu_key) {
+		if ($postdata['key'] === $payu_key) {
 			$amount      		= 	number_format($postdata['amount'], 2);
-			$productInfo  		= 	$postdata['productinfo'];
-			$firstname    		= 	$postdata['firstname'];
-			$email        		=	$postdata['email'];
-			$phone        		=	$postdata['phone'];
-			$udf5				=   $postdata['udf5'];
-			create_user_and_login_if_not_exist($email);
-			$user = get_user_by('email', $email);
-			if ($user) {
-				$user_id = $user->ID;
-				$order->set_customer_id($user_id);
-				update_user_meta($user_id, 'payu_phone', $phone);
-			}
+			$productInfo  		= 	sanitize_text_field($postdata['productinfo']);
+			$firstname    		= 	sanitize_text_field($postdata['firstname']);
+			$email        		=	sanitize_email($postdata['email']);
+			$phone        		=	sanitize_text_field($postdata['phone']);
+			$udf5				=   sanitize_text_field($postdata['udf5']);
+
 
 			$keyString = $payu_key . '|' . $txnid . '|' . $amount . '|' . $productInfo . '|' . $firstname . '|' . $email
 				. '||||' . $udf4 . '|' . $udf5 . '|||||';
 			$keyArray 	  		= 	explode("|", $keyString);
 			$reverseKeyArray 	= 	array_reverse($keyArray);
 			$reverseKeyString	=	implode("|", $reverseKeyArray);
-			$this->payuUpdateShippingAddress($postdata, $order);
-			$order = $this->processPaymentStatus($postdata, $order, $reverseKeyString, $payu_key, $payu_salt);
+			$order = $this->processPaymentStatus(
+				$postdata,
+				$order,
+				$reverseKeyString,
+				$payu_key,
+				$payu_salt
+			);
+
+			if ($order && $order->is_paid()) {
+				$this->payuUpdateShippingAddress($postdata, $order);
+			}
 		}
 		return $order;
 	}
@@ -135,20 +156,28 @@ class PayuPaymentValidation
 	private function payuUpdateShippingAddress($postdata, $order)
 	{
 		if (isset($postdata['shipping_address']) && !empty($postdata['shipping_address'])) {
-			$full_name = explode(' ', $postdata['shipping_address']['name']);
+			$full_name = explode(
+				' ',
+				sanitize_text_field($postdata['shipping_address']['name'])
+			);
 
 			$new_address = array(
-				'country' => 'IN',
-				'state' => get_state_code_by_name($postdata['shipping_address']['state']),
-				'city' => $postdata['shipping_address']['city'],
-				'email' => $postdata['shipping_address']['email'],
-				'postcode' => $postdata['shipping_address']['pincode'],
-				'phone' => $postdata['shipping_address']['addressPhoneNumber'],
-				'address_1' => $postdata['shipping_address']['addressLine'],
-				'first_name' => isset($full_name[0]) ? $full_name[0] : '',
-				'last_name' => isset($full_name[1]) ? $full_name[1] : ''
+				'country'   => 'IN',
+				'state'     => get_state_code_by_name(
+					sanitize_text_field($postdata['shipping_address']['state'])
+				),
+				'city'      => sanitize_text_field($postdata['shipping_address']['city']),
+				'email'     => sanitize_email($postdata['shipping_address']['email']),
+				'postcode'  => sanitize_text_field($postdata['shipping_address']['pincode']),
+				'phone'     => sanitize_text_field($postdata['shipping_address']['addressPhoneNumber']),
+				'address_1' => sanitize_text_field($postdata['shipping_address']['addressLine']),
+				'first_name' => isset($full_name[0]) ? sanitize_text_field($full_name[0]) : '',
+				'last_name'  => isset($full_name[1]) ? sanitize_text_field($full_name[1]) : '',
 			);
-			$order->update_meta_data('shipping_email', $postdata['shipping_address']['email']);
+			$order->update_meta_data(
+				'shipping_email',
+				sanitize_email($postdata['shipping_address']['email'])
+			);
 			$order->set_shipping_first_name(isset($full_name[0]) ? $full_name[0] : '');
 			$order->set_address($new_address, 'shipping');
 			$order->set_address($new_address, 'billing');
@@ -168,78 +197,193 @@ class PayuPaymentValidation
 	private function processPaymentStatus($postdata, $order, $reverseKeyString, $payu_key, $payu_salt)
 	{
 
-		$status = $postdata['status'];
-		switch ($status) {
+		// $status = $postdata['status'];
+		// switch ($status) {
+		// 	case 'success':
+		// 		return $this->processSuccessPayment($postdata, $order, $reverseKeyString, $payu_key, $payu_salt);
+		// 	case 'failure':
+		// 		return $this->processFailurePayment($postdata, $order);
+		// 	default:
+		// 		return $this->processDefaultPayment($order);
+		// }
+		if (!$this->verifyResponseHash($postdata, $payu_salt)) {
+
+			$this->msg['class'] = 'error';
+			$this->msg['message'] = esc_html__('Invalid PayU response hash.', 'payu-india');
+
+			return $order;
+		}
+
+		switch ($postdata['status']) {
+
 			case 'success':
-				return $this->processSuccessPayment($postdata, $order, $reverseKeyString, $payu_key, $payu_salt);
-				break;
+				return $this->processSuccessPayment(
+					$postdata,
+					$order,
+					$reverseKeyString,
+					$payu_key,
+					$payu_salt
+				);
+
 			case 'failure':
 				return $this->processFailurePayment($postdata, $order);
-				break;
+
 			default:
 				return $this->processDefaultPayment($order);
 		}
 	}
 
+	private function verifyResponseHash($postdata, $payu_salt)
+	{
+
+		$additional_charges = isset($postdata['additionalCharges'])
+			? $postdata['additionalCharges']
+			: 0;
+
+		$amount = number_format((float) $postdata['amount'], 2, '.', '');
+
+		$response_raw_hash =
+			'|||||' .
+			$postdata['udf5'] . '|' .
+			$postdata['udf4'] . '|' .
+			$postdata['udf3'] . '|' .
+			$postdata['udf2'] . '|' .
+			$postdata['udf1'] . '|' .
+			$postdata['email'] . '|' .
+			$postdata['firstname'] . '|' .
+			$postdata['productinfo'] . '|' .
+			$amount . '|' .
+			$postdata['txnid'] . '|' .
+			$postdata['key'];
+
+		$salt_string =
+			$payu_salt . '|' .
+			$postdata['status'] . '|' .
+			$response_raw_hash;
+
+		if ($additional_charges > 0) {
+			$salt_string =
+				$additional_charges . '|' . $salt_string;
+		}
+
+		return hash_equals(
+			strtolower(hash('sha512', $salt_string)),
+			strtolower($postdata['hash'])
+		);
+	}
 	private function processSuccessPayment($postdata, $order, $reverseKeyString, $payu_key, $payu_salt)
 	{
 		global $woocommerce;
-		$txnid = $postdata['txnid'];
-		$order_id = $order->id;
-		$amount = $postdata['amount'];
+		$txnid = sanitize_text_field($postdata['txnid']);
+		$order_id = $order->get_id();
+		$amount = (float) $postdata['amount'];
 		$additionalCharges = 0;
 
 		if (isset($postdata["additionalCharges"])) {
-			$additionalCharges = $postdata['additionalCharges'];
+			$additionalCharges = (float) $postdata['additionalCharges'];
 		}
 		$postdata['amount'] = number_format($postdata['amount'], 2);
 		$postdata['amount'] = str_replace(",", "", $postdata['amount']);
 		// New code added Start for Hashkey
-		$responseRawHashString = '|||||' . $postdata['udf5'] . '|' . $postdata['udf4'] . '|' . $postdata['udf3'] . '|' . $postdata['udf2'] . '|' . $postdata['udf3'] . '|' . $postdata['email'] . '|' . $postdata['firstname'] . '|' . $postdata['productinfo'] . '|' . $postdata['amount'] . '|' . $postdata['txnid'] . '|' . $postdata['key'];
+		// $responseRawHashString = '|||||' . $postdata['udf5'] . '|' . $postdata['udf4'] . '|' . $postdata['udf3'] . '|' . $postdata['udf2'] . '|' . $postdata['udf3'] . '|' . $postdata['email'] . '|' . $postdata['firstname'] . '|' . $postdata['productinfo'] . '|' . $postdata['amount'] . '|' . $postdata['txnid'] . '|' . $postdata['key'];
 
-		$saltString = $payu_salt . '|' . $postdata['status'] . '|' . $responseRawHashString;
+		// $saltString = $payu_salt . '|' . $postdata['status'] . '|' . $responseRawHashString;
 		// New code added End for Hashkey
 
-		if ($additionalCharges > 0) {
-			$saltString = $additionalCharges . '|' . $payu_salt . '|' . $postdata['status'] . '|' . $responseRawHashString;
-		}
+		// if (0 < $additionalCharges) {
+		// 	$saltString = $additionalCharges . '|' . $payu_salt . '|' . $postdata['status'] . '|' . $responseRawHashString;
+		// }
 
-		$sentHashString = strtolower(hash('sha512', $saltString));
+		// $sentHashString = strtolower(hash('sha512', $saltString));
 
 
-		$responseHashString = $postdata['hash'];
+		// $responseHashString = $postdata['hash'];
 
 		$this->msg['class'] = 'error';
 		$thankyou_msg = 'Thank you for shopping with us. However, the transaction has been declined.';
-		$this->msg['message'] = esc_html($thankyou_msg, 'payubiz');
-		if (
-			$sentHashString == $responseHashString &&
-			$this->verifyPayment($order, $txnid, $payu_key, $payu_salt, $this->bypassVerifyPayment)
+		$this->msg['message'] = esc_html($thankyou_msg);
+		if ( $this->verifyPayment($order, $txnid, $payu_key, $payu_salt, $this->bypassVerifyPayment)
 		) {
 			$thankyou_msg = 'Thank you for shopping with us. Your account has been charged and your transaction is successful'
 				. ' with the following order details:';
-			$this->msg['message'] = esc_html($thankyou_msg, 'payubiz');
-			$this->msg['message'] .= '<br>' . esc_html('Order Id:' . $order_id, 'payubiz') . '<br/>';
-			$this->msg['message'] .= esc_html('Amount:' . $amount, 'payubiz') . '<br />';
-			$this->msg['message'] .= esc_html('We will be shipping your order to you soon.', 'payubiz');
+			$this->msg['message'] = esc_html($thankyou_msg);
+			$this->msg['message'] .= '<br>' . esc_html__('Order Id:', 'payu-india') . ' ' . esc_html($order_id) . '<br/>';
+			$this->msg['message'] .= esc_html__('Amount:', 'payu-india') . ' ' . esc_html($amount) . '<br />';
+			$this->msg['message'] .= esc_html__('We will be shipping your order to you soon.', 'payu-india');
 
 
-			if ($additionalCharges > 0) {
+			if (0 < $additionalCharges) {
 				$thankyou_msg = 'Additional amount charged by PayUBiz - ' . $additionalCharges;
-				$this->msg['message'] .= '<br /><br />' . esc_html($thankyou_msg, 'payubiz');
+				$this->msg['message'] .= '<br /><br />' . esc_html($thankyou_msg);
 			}
 
 
 			$this->msg['class'] = 'success';
 
-			if ($order->status == 'processing' || $order->status == 'completed') {
+			if ('processing' === $order->get_status() || 'completed' === $order->get_status()) {
 				//do nothing
 			} else {
 				//complete the order
-				error_log("order marked payment completed order id $order_id");
+				$logger = wc_get_logger();
+				$logger->info(
+					"Order marked payment completed. Order ID: {$order_id}",
+					array('source' => 'payu-india')
+				);
+				if (
+					isset($postdata['extra_charges']['carrier_code']) &&
+					!empty($postdata['extra_charges']['carrier_code'])
+				) {
+					$this->update_shipping_method(
+						$order,
+						sanitize_text_field($postdata['extra_charges']['carrier_code'])
+					);
+				}
+				$order->update_meta_data(
+					'payu_bankcode',
+					sanitize_text_field($postdata['bankcode'])
+				);
+
+				$order->update_meta_data(
+					'payu_mode',
+					sanitize_text_field($postdata['mode'])
+				);
+				$order->save();
 				$order->payment_complete();
-				$thankyou_msg = "PayUBiz has processed the payment. Ref Number: " . $postdata['mihpayid'];
-				$order->add_order_note(esc_html($thankyou_msg, 'payubiz'));
+				$user = get_user_by(
+					'email',
+					sanitize_email($postdata['email'])
+				);
+
+				if (! $user) {
+					create_user_and_login_if_not_exist(
+						sanitize_email($postdata['email'])
+					);
+					$user = get_user_by(
+						'email',
+						sanitize_email($postdata['email'])
+					);
+				}
+
+				if ($user) {
+					$user_id = $user->ID;
+
+					$order->set_customer_id($user_id);
+
+					update_user_meta(
+						$user_id,
+						'payu_phone',
+						sanitize_text_field($postdata['phone'])
+					);
+
+					$order->save();
+				}
+				$order->add_order_note(
+					sprintf(
+						/* translators: %s: PayU payment reference number (mihpayid). */
+						esc_html__('PayUBiz has processed the payment. Ref Number: %s', 'payu-india'),
+						sanitize_text_field($postdata['mihpayid'])
+					)
+				);
 				$order->add_order_note($this->msg['message']);
 				$order->add_order_note('Paid by PayUBiz');
 				$woocommerce->cart->empty_cart();
@@ -249,18 +393,39 @@ class PayuPaymentValidation
 			$this->msg['class'] = 'error';
 			$thankyou_msg = 'Thank you for shopping with us. However, the payment failed test1';
 			$this->msg['message'] = esc_html($thankyou_msg);
-			$order->update_status('failed test2');
-			$order->add_order_note('Failed test3');
+			if ($order->is_paid()) {
+				return $order;
+			}
+			$order->update_status('failed');
+			$order->add_order_note('Failed');
 			$order->add_order_note($this->msg['message']);
-			error_log("order marked failed order id $order_id");
+			$logger = wc_get_logger();
+			$logger->error(
+				"Order marked failed. Order ID: {$order_id}",
+				array('source' => 'payu-india')
+			);
 		}
 		return $order;
 	}
 
 	private function processFailurePayment($postdata, $order)
 	{
+		if ($order->is_paid()) {
+			return $order;
+		}
 		$this->msg['class'] = 'error';
-		$thankyou_msg = 'Thank you for shopping with us. However, the payment failed test4(' . $postdata['field9'] . ')';
+		$failure_reason = isset($postdata['field9'])
+			? sanitize_text_field($postdata['field9'])
+			: '';
+
+		if (! empty($failure_reason)) {
+			$thankyou_msg = sprintf(
+				'Thank you for shopping with us. However, the payment failed (%s).',
+				$failure_reason
+			);
+		} else {
+			$thankyou_msg = 'Thank you for shopping with us. However, the payment failed.';
+		}
 		$this->msg['message'] = esc_html($thankyou_msg);
 		$order->update_status('failed');
 		$order->add_order_note('Failed');
@@ -271,6 +436,9 @@ class PayuPaymentValidation
 
 	private function processDefaultPayment($order)
 	{
+		if ($order->is_paid()) {
+			return $order;
+		}
 		$this->msg['class'] = 'error';
 		$thankyou_msg = 'Thank you for shopping with us. However, the payment failed';
 		$this->msg['message'] = esc_html($thankyou_msg);
@@ -292,10 +460,10 @@ class PayuPaymentValidation
 
 			foreach ($transaction_offer['offer_data'] as $offer_data) {
 
-				if ($offer_data['status'] == 'SUCCESS') {
+				if ('SUCCESS' === $offer_data['status']) {
 					$offer_title = $offer_data['offer_title'];
 					$discount = $offer_data['discount'];
-					if ($offer_data['offer_type'] != 'CASHBACK') {
+					if ('CASHBACK' !== $offer_data['offer_type']) {
 						$this->wcUpdateOrderAddDiscount($order, $offer_title, $discount);
 					}
 					$offer_key = $offer_data['offer_key'];
@@ -356,35 +524,32 @@ class PayuPaymentValidation
 		}
 
 		try {
-			$url = ($this->gatewayModule == 'sandbox') ?
+			$url = ('sandbox' === $this->gatewayModule) ?
 				PAYU_POSTSERVICE_FORM_2_URL_UAT :
 				PAYU_POSTSERVICE_FORM_2_URL_PRODUCTION;
 
 			$response = $this->sendVerificationRequest($url, $payu_key, $txnid, $payu_salt);
 
 			if (!$response || !isset($response['body'])) {
-				$verify_flag = false;
+				return false;
 			}
 
 			$res = json_decode(sanitize_text_field($response['body']), true);
 			if (!isset($res['status'])) {
-				$verify_flag = false;
+				return false;
 			}
 
 			$transaction_details = $res['transaction_details'][$txnid] ?? null;
 			if (!$transaction_details) {
-				$verify_flag = false;
+				return false;
 			}
 
-			// reconcile offer data
-			// $transaction_offer = json_decode($transaction_details['transactionOffer']);
-			// $this->reconcileOfferData($transaction_offer, $order);
 			$transaction_offer = isset($transaction_details['transactionOffer']) ?
 				json_decode($transaction_details['transactionOffer'], true) : null;
-			if ($transaction_offer) {
+			$verify_flag = ('success' === strtolower($transaction_details['status']));
+			if ($verify_flag && $transaction_offer) {
 				$this->reconcileOfferData($transaction_offer, $order);
 			}
-			$verify_flag = strtolower($transaction_details['status']) == 'success';
 		} catch (Exception $e) {
 			$verify_flag = false;
 		}
@@ -413,24 +578,35 @@ class PayuPaymentValidation
 			]
 		];
 		$response = wp_remote_post($url, $args);
+		if (is_wp_error($response)) {
+			$args_log['response_data'] = $response->get_error_message();
+			payu_insert_event_logs($args_log);
+			return false;
+		}
 		$response_code = wp_remote_retrieve_response_code($response);
 		$headerResult = wp_remote_retrieve_headers($response);
+		$log_fields = $fields;
+
+		unset($log_fields['hash']);
 		$args_log = array(
 			'request_type' => 'outgoing',
 			'method' => 'post',
 			'url' => $url,
 			'request_headers' => $args['headers'],
-			'request_data' => $fields,
+			'request_data' => $log_fields,
 			'status' => $response_code,
 			'response_headers' => $headerResult,
 			'response_data' => 'null'
 		);
-		if (!isset($response['body'])) {
+		if (empty($response['body'])) {
 
 			payu_insert_event_logs($args_log);
 			return false;
 		} else {
-			$res = json_decode(sanitize_text_field($response['body']), true);
+			$res = json_decode(wp_remote_retrieve_body($response), true);
+			if (JSON_ERROR_NONE !== json_last_error()) {
+				return false;
+			}
 			$args_log['response_data'] = $res;
 			payu_insert_event_logs($args_log);
 		}
@@ -455,7 +631,7 @@ class PayuPaymentValidation
 			$instance_id = $item->get_instance_id();
 			$added_shipping[] = (string)$method_id . ':' . $instance_id;
 		}
-		if (!empty($added_shipping) && in_array($new_method_id, $added_shipping)) {
+		if (!empty($added_shipping) && in_array($new_method_id, $added_shipping, true)) {
 			return;
 		}
 

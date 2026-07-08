@@ -4,7 +4,9 @@
  * Payu Calculation Shipping and Tax cost.
 
  */
-
+if ( ! defined( 'ABSPATH' ) ) {
+    exit;
+}
 class PayuCartExpressCheckout
 {
 
@@ -178,7 +180,7 @@ class PayuCartExpressCheckout
             'first_name' => $first_name ? $first_name : 'test',
             'last_name' => $last_name,
             'address_1' => $address_1 ? $address_1 : 'address',
-            'company' => $company ? $company : 'null',
+            'company' => $company ? $company : '',
             'email' => $email ? $email : 'test@gmail.com',
             'phone' => $billing_phone ? $billing_phone : '1234567890',
             'city' => $city ? $city : 'Noida',
@@ -234,12 +236,13 @@ class PayuCartExpressCheckout
 
         if (is_checkout()) {
             // Get the current URL
-            $current_url = home_url(add_query_arg(array(), $_SERVER['REQUEST_URI']));
+            $request_uri = isset($_SERVER['REQUEST_URI']) ? sanitize_text_field(wp_unslash($_SERVER['REQUEST_URI'])) : '';
+            $current_url = home_url(add_query_arg(array(), $request_uri));
             $cart_url = wc_get_cart_url();
             // Check if "/order-pay" is not present in the URL
             if (strpos($current_url, '/order-pay') === false && strpos($current_url, '/order-received') === false) {
                 // User is on the checkout page without "/order-pay" in the URL
-                wp_redirect($cart_url);
+                wp_safe_redirect($cart_url);
                 exit;
         ?>
 <?php
@@ -299,7 +302,6 @@ class PayuCartExpressCheckout
 
     public function disable_coupon_field_on_checkout($enabled)
     {
-        error_log($enabled);
         return false;
     }
 
@@ -309,14 +311,14 @@ class PayuCartExpressCheckout
         // if ($total_rows['payment_method']['value'] == 'PayUBiz') {
         if (isset($total_rows['payment_method']['value']) && $total_rows['payment_method']['value'] === 'PayUBiz') {
             $payment_mode['payment_mode'] = array(
-                'label' => __('Payment Mode', 'payubiz'),
+                'label' => __('Payment Mode', 'payu-india'),
                 'value' => $order->get_meta('payu_mode'),
             );
 
             $payu_offer_type = $order->get_meta('payu_offer_type');
             if ($payu_offer_type) {
                 $payment_mode['payment_offer_type'] = array(
-                    'label' => __('Offer Type', 'payubiz'),
+                    'label' => __('Offer Type', 'payu-india'),
                     'value' => $payu_offer_type,
                 );
             }
@@ -356,9 +358,11 @@ class PayuCartExpressCheckout
 
     public function payu_woocommerce_pay_order_before_submit()
     {
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading query parameter to detect WooCommerce pay-for-order page.
         if (isset($_GET['pay_for_order'])) {
             // Extract the order ID from the URL
-            $current_url = wp_unslash(esc_url(empty($_SERVER['REQUEST_URI'])));
+            $request_uri = isset($_SERVER['REQUEST_URI']) ? sanitize_text_field(wp_unslash($_SERVER['REQUEST_URI'])) : '';
+            $current_url = home_url($request_uri);
             $url_parts = wp_parse_url($current_url);
             // Extract the path
             $path = isset($url_parts['path']) ? $url_parts['path'] : '';

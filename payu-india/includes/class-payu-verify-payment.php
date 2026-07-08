@@ -1,4 +1,7 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 
 class PayuVerifyPayments extends WcPayubiz
 {
@@ -12,9 +15,6 @@ class PayuVerifyPayments extends WcPayubiz
     {
 
         $plugin_data = get_option('woocommerce_payubiz_settings');
-        // $this->gateway_module = $plugin_data['gateway_module'];
-        // $this->payu_salt = $plugin_data['currency1_payu_salt'];
-        // $this->payu_key = $plugin_data['currency1_payu_key'];
 
         if (is_array($plugin_data)) {
             $this->gateway_module = $plugin_data['gateway_module'];
@@ -37,23 +37,30 @@ class PayuVerifyPayments extends WcPayubiz
 
         // run a cron after order creation to check the payment status
         add_action('woocommerce_checkout_order_processed', array($this, 'schedulePaymentStatusCheck'));
-        add_action('woocommerce_new_order', array($this, 'schedulePaymentStatusCheck'));
+        // Disabled duplicate cron scheduling hook to avoid multiple cron entries for the same order.
+        // add_action('woocommerce_new_order', array($this, 'schedulePaymentStatusCheck'));
     }
 
     public function schedulePaymentStatusCheck($order_id)
     {
-        date_default_timezone_set('Asia/Kolkata');
+        // date_default_timezone_set('Asia/Kolkata');
 
         $schedule_time = time() + 360;
         $expiry_time = time() + 2700;
         $order = new WC_Order($order_id);
-        $order_new = serialize($order);
+        // Avoid storing serialized WC_Order object in cron args to prevent excessive memory usage.
+        // $order_new = serialize($order);
+        $order_new = $order->get_id();
         if ($order->is_paid()) {
             return;
         }
-        $args = array($order_new, $schedule_time, $expiry_time);
-
+        // $args = array($order_new, $schedule_time, $expiry_time);
+        // Using lightweight order ID instead of serialized order object in cron arguments.
+        $args = array($order_id, $schedule_time, $expiry_time);
+        // Clear existing scheduled cron for same order to prevent duplicate cron buildup.
+        wp_clear_scheduled_hook('pass_arguments_to_verify', $args);
         if (!wp_next_scheduled('pass_arguments_to_verify', $args)) {
+            // Schedule recurring payment verification cron until order is completed or expired.
             wp_schedule_event($schedule_time, 'every_five_min', 'pass_arguments_to_verify', $args);
         }
     }
@@ -61,10 +68,11 @@ class PayuVerifyPayments extends WcPayubiz
     function passArgumentstoVerify($order, $schedule_time, $expiry_time)
     {
         global $wpdb;
+        // Removed unserialize() usage as cron now stores only order ID instead of full WC_Order object.
         // $order = unserialize($order);
-        if (is_string($order)) {
-            $order = unserialize($order);
-        }
+        // if (is_string($order)) {
+        //     $order = unserialize($order);
+        // }
 
         if (!$order instanceof WC_Order) {
             $order = wc_get_order($order);
@@ -82,7 +90,9 @@ class PayuVerifyPayments extends WcPayubiz
             return;
         }
 
-        $now = time();
+        // $now = time();
+        // Using WordPress current_time() for timezone-safe cron comparison.
+        $now = current_time('timestamp');
 
         // Check if the expiry time has passed
         // if ($expiry_time <= $now) {
@@ -90,7 +100,9 @@ class PayuVerifyPayments extends WcPayubiz
         //     $this->handleCancellation($order, $schedule_time, $expiry_time);
         //     return;
         // }
-        if ($expiry_time <= $now && $order->get_status() === 'pending') {
+        
+        // Prevent refund execution if payment is already completed but order status update is delayed.
+        if ($expiry_time <= $now && $order->get_status() === 'pending' && !$order->is_paid()) {
             $this->handleRefundExpiredOrder($order);
             $this->handleCancellation($order, $schedule_time, $expiry_time);
             return;
@@ -108,7 +120,7 @@ class PayuVerifyPayments extends WcPayubiz
     private function handleCancellation($order, $schedule_time, $expiry_time)
     {
         // Handle cancellation logic here
-        $this->clearScheduledTask(serialize($order), $schedule_time, $expiry_time);
+        $this->clearScheduledTask($order->get_id(), $schedule_time, $expiry_time);
     }
 
     private function handleRefundExpiredOrder($order)
@@ -117,7 +129,7 @@ class PayuVerifyPayments extends WcPayubiz
         // if ($method == 'payubiz') { #changed
         if ($method == 'payubiz' && $order->get_status() !== 'completed' && $order->get_status() !== 'processing') {
             // Handle expired order logic here
-            $order_id = $order->id;
+            $order_id = $order->get_id();
             $refund_amount = $order->get_total();
             $refund_reason = 'Order not confirmed';
             $refund_id = wc_create_refund(array(
@@ -141,9 +153,9 @@ class PayuVerifyPayments extends WcPayubiz
     {
         // Handle payubiz payment logic here
         $plugin_data = get_option('woocommerce_payubiz_settings');
-        $txnid = get_post_meta($order->id, 'order_txnid', true);
+        $txnid = get_post_meta($order->get_id(), 'order_txnid', true);
         if ($txnid) {
-            $this->insert_cron_data($order->id, $txnid, 'pending');
+            $this->insert_cron_data($order->get_id(), $txnid, 'pending');
             $payuPaymentValidation = new PayuPaymentValidation();
             $verify_status = $payuPaymentValidation->verifyPayment(
                 $order,
@@ -158,10 +170,10 @@ class PayuVerifyPayments extends WcPayubiz
             }
             if ($verify_status) {
                 $order->payment_complete();
-                error_log("order marked completed by scheduler  $order->id");
+                error_log("order marked completed by scheduler  $order->get_id()");
                 if ($order->is_paid()) {
                     error_log("Already paid. Cancelling future cron for order {$order->get_id()}");
-                    $this->clearScheduledTask(serialize($order), $schedule_time, $expiry_time);
+                    $this->clearScheduledTask($order->get_id(), $schedule_time, $expiry_time);
                     return;
                 }
             }
@@ -172,7 +184,7 @@ class PayuVerifyPayments extends WcPayubiz
     function insert_cron_data($order_id, $txnid, $status)
     {
         global $wpdb;
-        date_default_timezone_set('Asia/Kolkata');
+        // date_default_timezone_set('Asia/Kolkata');
         $table = $wpdb->prefix . 'payu_cron_logs';
         $currentDateTime = new DateTime();
         $currentDateTime = $currentDateTime->format('Y-m-d H:i:s');
@@ -187,6 +199,7 @@ class PayuVerifyPayments extends WcPayubiz
     public function clearScheduledTask($order, $schedule_time, $expiry_time)
     {
         $args = array($order, $schedule_time, $expiry_time);
+        // Remove scheduled cron events once order is completed, cancelled, or refunded.
         wp_clear_scheduled_hook('pass_arguments_to_verify', $args);
     }
 
@@ -204,7 +217,9 @@ class PayuVerifyPayments extends WcPayubiz
 
         $date = gmdate('D, d M Y H:i:s \G\M\T');
         $hashString = "|" . $date . "|" . $this->payu_salt;
+        error_log("payu hashString1".  $hashString);
         $hash = $this->getSha512Hash($hashString);
+        error_log("payu hash".  $hash);
         $url = PAYU_ORDER_DETAIL_API . $txnid;
         if ($this->gateway_module == 'sandbox') {
             $url = PAYU_ORDER_DETAIL_API_UAT . $txnid;

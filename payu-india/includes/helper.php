@@ -1,4 +1,7 @@
 <?php
+if (! defined('ABSPATH')) {
+	exit;
+}
 // get pages
 function payu_get_pages($title = false, $indent = true)
 {
@@ -68,7 +71,7 @@ function shift_element_after_assoc($array, $keyToShift, $keyAfter)
 	return $array;
 }
 
-function create_user_and_login_if_not_exist($email, $login = true)
+function create_user_and_login_if_not_exist($email)
 {
 	// Check if the user already exists
 	$user = get_user_by('email', $email);
@@ -78,17 +81,12 @@ function create_user_and_login_if_not_exist($email, $login = true)
 		$user_id = wp_create_user($email, $password, $email);
 
 		// Check if user creation was successful
-		if (!is_wp_error($user_id) && $login) {
-			// User created successfully, log in the user
-			$user = get_user_by('id', $user_id);
-			wp_set_current_user($user_id, $user->user_login);
-			wp_set_auth_cookie($user_id);
-			do_action('wp_login', $user->user_login, $user);
-
+		if (! is_wp_error($user_id)) {
+			// User created successfully.
 			return true;
-		} else {
-			return false;
 		}
+
+		return false;
 	} else {
 		return true;
 	}
@@ -314,56 +312,57 @@ function check_shipping_methods_setup()
 	return $shipping_method_found ? true : false;
 }
 
-    /*=================================================================
+/*=================================================================
 	  -------- check shipping amount exist or not ------------
 	================================================================= */
-	function get_available_shipping_methods() {
-		$packages = WC()->shipping()->get_packages();
-		$has_shipping_cost = false; 
-	
-		foreach ($packages as $package) {
-			$shipping_methods = WC()->shipping()->calculate_shipping_for_package($package);
-	
-			if (!empty($shipping_methods['rates'])) {
-				foreach ($shipping_methods['rates'] as $rate) {
-					if ($rate->get_cost() > 0) {
-						$has_shipping_cost = true;
-						break 2; 
-					}
+function get_available_shipping_methods()
+{
+	$packages = WC()->shipping()->get_packages();
+	$has_shipping_cost = false;
+
+	foreach ($packages as $package) {
+		$shipping_methods = WC()->shipping()->calculate_shipping_for_package($package);
+
+		if (!empty($shipping_methods['rates'])) {
+			foreach ($shipping_methods['rates'] as $rate) {
+				if ($rate->get_cost() > 0) {
+					$has_shipping_cost = true;
+					break 2;
 				}
 			}
 		}
-	
-		return $has_shipping_cost ? "true" : "false";
 	}
 
-	function payuEndPointData($data_array){
-        $plugin_data = get_option('woocommerce_payubiz_settings');
-        $payu_dynamic_charges_flag = $plugin_data['dynamic_charges_flag'];
-        
-		$isShippingAmountExisting = get_available_shipping_methods();
-		
-		$site_link = get_site_url();
-		$payu_payment_success_webhook_url = $site_link . '/wp-json/payu/v1/get-payment-success-update';
-		$payu_payment_failed_webhook_url = $site_link . '/wp-json/payu/v1/get-payment-failed-update';
+	return $has_shipping_cost ? "true" : "false";
+}
 
-		$data_array['partner_webhook_success'] = $payu_payment_success_webhook_url;
-		$data_array['partner_webhook_failure'] = $payu_payment_failed_webhook_url;
-		$data_array['dynamic_charges_endpoint'] = $site_link;
-        
-        $mydynamiccharges=$payu_dynamic_charges_flag;
-        if($mydynamiccharges=="yes" && $isShippingAmountExisting == "true" ){
-         $mydynamiccharges="true";   
-        }
-        else{
-         $mydynamiccharges="false";   
-        }
-		
-		$data_array['fetch_dynamic_charges'] = $mydynamiccharges;
-		//$data_array['testshipping_charges'] = $shippingCharges_total;
+function payuEndPointData($data_array)
+{
+	$plugin_data = get_option('woocommerce_payubiz_settings');
+	$payu_dynamic_charges_flag = $plugin_data['dynamic_charges_flag'];
 
-		return $data_array;
+	$isShippingAmountExisting = get_available_shipping_methods();
+
+	$site_link = get_site_url();
+	$payu_payment_success_webhook_url = $site_link . '/wp-json/payu/v1/get-payment-success-update';
+	$payu_payment_failed_webhook_url = $site_link . '/wp-json/payu/v1/get-payment-failed-update';
+
+	$data_array['partner_webhook_success'] = $payu_payment_success_webhook_url;
+	$data_array['partner_webhook_failure'] = $payu_payment_failed_webhook_url;
+	$data_array['dynamic_charges_endpoint'] = $site_link;
+
+	$mydynamiccharges = $payu_dynamic_charges_flag;
+	if ($mydynamiccharges == "yes" && $isShippingAmountExisting == "true") {
+		$mydynamiccharges = "true";
+	} else {
+		$mydynamiccharges = "false";
 	}
+
+	$data_array['fetch_dynamic_charges'] = $mydynamiccharges;
+	//$data_array['testshipping_charges'] = $shippingCharges_total;
+
+	return $data_array;
+}
 
 
 	/*=================================================================
@@ -383,4 +382,3 @@ function check_shipping_methods_setup()
 	// 	}
 	// }
 	// add_action('template_redirect', 'redirect_to_checkout_if_commerce_pro');
-	

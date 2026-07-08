@@ -36,8 +36,15 @@ class PayuPaymentGatewayAPI
             }
 
             $tblname = 'payu_transactions';
-            $wp_track_table = $table_prefix . "$tblname ";
-            $transaction_id = $wpdb->get_var("select transaction_id from $wp_track_table where order_id = '$order_id'");
+$wp_track_table = esc_sql($wpdb->prefix . $tblname);
+           $transaction_id = $wpdb->get_var(
+    $wpdb->prepare(
+        "SELECT transaction_id
+        FROM `{$wp_track_table}`
+        WHERE order_id = %d",
+        absint($order_id)
+    )
+);
 
             if ($transaction_id) {
                 $payu_transaction_id = $transaction_id;
@@ -119,14 +126,18 @@ class PayuPaymentGatewayAPI
             $wp_refund_transactions_table = $table_prefix . "$payu_refund_transactions ";
 
             $request_id = $wpdb->get_var(
-                "SELECT rf.request_id
-                FROM $wp_order_table as wo
-                join $wp_refund_transactions_table as rf
-                on rf.order_id = wo.id
-                WHERE wo.id = '$order_id'
-                AND wo.status LIKE 'wc-refund-progress'
-                AND wo.type LIKE 'shop_order'
-                AND rf.status = 'processed'"
+                $wpdb->prepare(
+                    "SELECT rf.request_id
+                    FROM {$wp_order_table} AS wo
+                    INNER JOIN {$wp_refund_transactions_table} AS rf
+                        ON rf.order_id = wo.id
+                    WHERE wo.id = %d
+                    AND wo.status = %s
+                    AND wo.type = %s",
+                    (int) $order_id,
+                    'wc-refund-progress',
+                    'shop_order'
+                )
             );
 
             if ($request_id) {
@@ -215,7 +226,7 @@ class PayuPaymentGatewayAPI
                 foreach ($refund_result['transaction_details'] as $transaction_detail_data) {
                     foreach ($transaction_detail_data as $transaction_detail) {
                         $refund_status = $transaction_detail['status'];
-                        $result = $transaction_detail['status'] == $refund_status;
+                        $result = strtolower($transaction_detail['status']) === $refund_status;
                     }
                 }
             } else {
@@ -296,7 +307,7 @@ class PayuPaymentGatewayAPI
                 );
 
                 // $get_state_list = get_state_list();
-		        // $state = $get_state_list[$address[$address_type . '_state']];
+                // $state = $get_state_list[$address[$address_type . '_state']];
                 $get_state_list = get_state_list();
                 $state_key = $address[$address_type . '_state'] ?? null;
                 $state = $state_key && isset($get_state_list[$state_key]) ? $get_state_list[$state_key] : '';
@@ -389,7 +400,10 @@ class PayuPaymentGatewayAPI
                     'x-credential-username' => $this->payu_key
                 );
                 $get_state_list = get_state_list();
-		        $state = $get_state_list[$address[$address_type . '_state']];
+                $state_key = $address[$address_type . '_state'] ?? null;
+                $state = $state_key && isset($get_state_list[$state_key])
+                    ? $get_state_list[$state_key]
+                    : '';
 
                 $name = $address[$address_type . '_first_name'] . ' ' . $address[$address_type . '_last_name'];
                 // Request body
@@ -425,7 +439,7 @@ class PayuPaymentGatewayAPI
                     'body' => $body,
                     'method'    => 'PUT'
                 ));
-                
+
                 $response_code = wp_remote_retrieve_response_code($response);
                 $headerResult = wp_remote_retrieve_headers($response);
                 // Check for errors
@@ -528,6 +542,7 @@ class PayuPaymentGatewayAPI
 
         $date = gmdate('D, d M Y H:i:s \G\M\T');
         $hashString = "|" . $date . "|" . $this->payu_salt;
+        error_log("payu hashString3".  $hashString);
         $hash = $this->getSha512Hash($hashString);
 
         $url = 'https://apitest.payu.in/cart/order/996_240321:12';

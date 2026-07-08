@@ -4,7 +4,9 @@
  * Payu Calculation Shipping and Tax cost.
 
  */
-
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 class PayuShippingTaxApiCalc
 {
 
@@ -32,12 +34,10 @@ class PayuShippingTaxApiCalc
 
         // Get the raw JSON request body
         $raw_json_body = $request->get_body();
-        error_log('Raw Json Body: ' . $raw_json_body);
 
         // Decode body
         $parameters = json_decode($raw_json_body, true);
 
-        // error_log('json Decode Body ' . $parameters);
         // Basic validation
         if (!is_array($parameters)) {
             return new WP_REST_Response([
@@ -52,9 +52,7 @@ class PayuShippingTaxApiCalc
 
         // Get headers
         $headers = apache_request_headers();
-        $token = $headers['Auth-Token'] ?? '';
-
-        error_log('First token : ' . $token);
+        $token = $request->get_header( 'Auth-Token' );
 
         try {
             if ($token && $this->payu_validate_authentication_token($raw_json_body, $token)) {
@@ -76,7 +74,6 @@ class PayuShippingTaxApiCalc
             return new WP_REST_Response($response, 500);
         }
         $response_code = $response['status'] == 'false' ? 400 : 200;
-        error_log('shipping api call response ' . json_encode($response));
         return new WP_REST_Response($response, $response_code);
     }
 
@@ -96,7 +93,6 @@ class PayuShippingTaxApiCalc
         $order_string = explode('_', $txnid);
         $order_id = (int) $order_string[0];
         $order = wc_get_order($order_id);
-        // error_log(var_dump($order , true ));
 
         $shipping_address = $parameters['address'];
         if (!$email) {
@@ -145,12 +141,9 @@ class PayuShippingTaxApiCalc
     // Helper function to update shipping address
     public function update_order_shipping_address($order, $new_address, $email)
     {
-        // Print new_address before anything else
-        error_log('Received new_address: ' . json_encode($new_address));
 
         // Validate order object
         if (!$order || !is_a($order, 'WC_Order')) {
-            error_log('Invalid order object');
             return false;
         }
 
@@ -158,8 +151,6 @@ class PayuShippingTaxApiCalc
         $order->set_address($new_address, 'shipping');
         $order->set_address($new_address, 'billing');
         $order->set_billing_email($email);
-
-        error_log('Updated order address: ' . json_encode($new_address));
 
         return $order;
     }
@@ -189,6 +180,7 @@ class PayuShippingTaxApiCalc
             $customer_data['address_1'] = $order->get_shipping_address_1();
             $customer_data['shipping_address_1'] = $order->get_shipping_address_1();
             $session['customer'] = maybe_serialize($customer_data);
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Updating WooCommerce session table is required.
             $wpdb->update(
                 $user_session_table,
                 array(
@@ -291,18 +283,20 @@ class PayuShippingTaxApiCalc
     private function payu_add_new_guest_user_cart_data($user_id, $session_key)
     {
         global $wpdb;
-        global $table_prefix, $wpdb;
-        $woocommerce_sessions = 'woocommerce_sessions';
-        $wp_woocommerce_sessions_table = $table_prefix . "$woocommerce_sessions ";
-        // Prepare the SQL query with a placeholder for the session key
-        $query = $wpdb->prepare("SELECT session_value FROM $wp_woocommerce_sessions_table
-        WHERE session_key = %s", $session_key);
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Direct query is required to read the WooCommerce session table.
+        $wc_session_data = $wpdb->get_var(
+            $wpdb->prepare(
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Dynamic table name uses trusted WordPress table prefix.
+                "SELECT session_value FROM `{$wpdb->prefix}woocommerce_sessions` WHERE session_key = %s",
+                $session_key
+            )
+        );
 
-        // Execute the prepared statement
-        $wc_session_data = $wpdb->get_var($query);
+        $cart_data['cart'] = maybe_unserialize(
+            maybe_unserialize( $wc_session_data )['cart']
+        );
 
-        $cart_data['cart'] = maybe_unserialize(maybe_unserialize($wc_session_data)['cart']);
-        update_user_meta($user_id, '_woocommerce_persistent_cart_1', $cart_data);
+        update_user_meta( $user_id, '_woocommerce_persistent_cart_1', $cart_data );
     }
     private function payu_validate_authentication_token($request_body, $token)
     {
@@ -315,7 +309,6 @@ class PayuShippingTaxApiCalc
 
         // Ensure required values exist
         if (empty($api_key) || empty($salt)) {
-            error_log("key and salt are empty");
             return false;
         }
 
@@ -331,7 +324,6 @@ class PayuShippingTaxApiCalc
             return true;
         }
 
-        error_log('Hash mismatch');
         return false;
     }
 }

@@ -1,5 +1,7 @@
 <?php
-
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
 define('PAYU_POSTSERVICE_FORM_2_URL_PRODUCTION', 'https://info.payu.in/merchant/postservice.php?form=2');
 define('PAYU_POSTSERVICE_FORM_2_URL_UAT', 'https://apitest.payu.in/merchant/postservice.php?form=2');
 define('PAYU_HOSTED_PAYMENT_URL_PRODUCTION', 'https://secure.payu.in/_payment');
@@ -22,4 +24,4 @@ define('CURL_CONTENT_TYPE','application/x-www-form-urlencoded');
 define('CURL_CONTENT_TYPE_JSON','application/json');
 $woocommerce_version = get_option('woocommerce_version');
 define('WOOCOMMERCE_CURRENT_VERSION',$woocommerce_version);
-define('COMMERCEPRO_APP_VERSION' , '3.8');
+define('COMMERCEPRO_APP_VERSION' , '3.9.0');
